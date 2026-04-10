@@ -23,11 +23,12 @@ from schemas import (
     SalesTrendItem,
     StockAgingItem,
 )
+from config import ALERT_DAYS
 
 router = APIRouter(prefix="/dashboard", tags=["看板统计"])
 
-# 压货默认阈值（天）
-_DEFAULT_AGING_DAYS = 90
+# 压货默认阈值（天），使用 config.ALERT_DAYS
+_DEFAULT_AGING_DAYS = ALERT_DAYS
 
 
 # ──────────────────────────────────────────────
