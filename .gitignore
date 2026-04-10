@@ -1,3 +1,17 @@
+# 数据库文件（运行时生成）
+data/jade.db
+data/jade.db-shm
+data/jade.db-wal
+
+# 图片上传目录（用户内容，不入库）
+data/images/*
+!data/images/.gitkeep
+
+# 前端构建产物
+frontend/node_modules/
+frontend/dist/
+backend/static/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
