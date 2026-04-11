@@ -1,0 +1,25 @@
+创建 backend/routers/dicts.py。
+创建 backend/routers/__init__.py（空文件）。
+【材质】
+GET    /api/v1/dicts/materials              — 列表（?include_inactive=true）
+POST   /api/v1/dicts/materials              — 新增（校验 name 唯一）
+PUT    /api/v1/dicts/materials/:id          — 编辑
+DELETE /api/v1/dicts/materials/:id          — 软删除（is_active=false）
+【器型】
+GET    /api/v1/dicts/types                  — 列表（返回含 spec_fields）
+POST   /api/v1/dicts/types                  — 新增（校验 name 唯一）
+DELETE /api/v1/dicts/types/:id              — 软删除
+【标签】
+GET    /api/v1/dicts/tags                   — 列表（?group_name= 筛选）
+POST   /api/v1/dicts/tags                   — 新增
+DELETE /api/v1/dicts/tags/:id               — 软删除
+【系统配置】
+GET    /api/v1/config                       — 所有配置
+PUT    /api/v1/config/:key                  — 更新单条配置
+规则：
+- DELETE 全部是软删除，不物理删除
+- 名称重复返回 HTTP 400 + {"code":400, "message":"材质「xxx」已存在"}
+- 默认只返回 is_active=true 的记录
+写完后创建一个最小的 main.py（只挂载这个 router + CORS + init_db），启动验证：
+curl http://localhost:8000/api/v1/dicts/materials | python3 -m json.tool
+确认返回36个材质。

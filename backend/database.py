@@ -1,121 +1,213 @@
 """
-数据库连接管理 — 引擎创建、Session 工厂、init_db()（建表 + 种子数据）。
+数据库连接管理 — SQLAlchemy 2.0 引擎配置。
+
 数据库文件默认位于项目根目录的 data/jade.db，可通过环境变量 DB_PATH 覆盖。
 """
 
 import os
 from pathlib import Path
+from typing import Generator
 
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-from config import DB_PATH, init_directories
-from models import (
-    Base,
-    DictMaterial,
-    DictTag,
-    DictType,
-    Supplier,
-)
+# 数据库路径配置
+_DEFAULT_DB_PATH = Path(__file__).parent.parent / "data" / "jade.db"
+DB_PATH = os.getenv("DB_PATH", str(_DEFAULT_DB_PATH))
 
-# 确保必要的目录存在
-init_directories()
+# 确保数据库目录存在
+Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
 
 # ──────────────────────────────────────────────
-# SQLAlchemy 引擎 & Session
+# SQLAlchemy 2.0 引擎配置
 # ──────────────────────────────────────────────
+
+# 创建引擎（SQLite）
 engine = create_engine(
     f"sqlite:///{DB_PATH}",
     connect_args={"check_same_thread": False},  # SQLite 多线程需要
     echo=False,  # 生产时关闭 SQL 日志，调试时可改为 True
+    future=True,  # 使用 SQLAlchemy 2.0 风格
 )
 
-SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+# Session 工厂
+SessionLocal = sessionmaker(
+    bind=engine,
+    autocommit=False,
+    autoflush=False,
+    class_=Session,
+    future=True,  # 使用 SQLAlchemy 2.0 风格
+)
 
+# ──────────────────────────────────────────────
+# 依赖注入生成器
+# ──────────────────────────────────────────────
 
-def get_db():
-    """FastAPI 依赖注入：提供数据库 Session，请求结束后自动关闭。"""
+def get_db() -> Generator[Session, None, None]:
+    """
+    FastAPI 依赖注入：提供数据库 Session，请求结束后自动关闭。
+
+    Usage:
+        @app.get("/items")
+        def list_items(db: Session = Depends(get_db)):
+            ...
+    """
     db: Session = SessionLocal()
     try:
         yield db
     finally:
         db.close()
 
-
 # ──────────────────────────────────────────────
-# 建表 + 种子数据
+# 数据库初始化函数
 # ──────────────────────────────────────────────
 
-# 种子材质列表（按 PRD.md 第5节）
-_SEED_MATERIALS = [
-    "翡翠", "和田玉", "水晶", "白银", "珍珠",
-    "檀木", "朱砂", "蜜蜡", "玛瑙", "南红",
-]
+def seed_data(session: Session) -> None:
+    """
+    插入种子数据（材质、器型、标签、系统配置等）。
 
-# 通用器型（每个材质都关联同一批器型）
-_SEED_TYPES = ["手镯", "挂件", "手串/手链", "戒指", "项链", "耳饰", "摆件", "吊坠"]
+    幂等设计：检查表是否已有数据，有则跳过。
 
-# 标签（按分组）
-_SEED_TAGS = [
-    # (name, group_name)
-    ("玻璃种", "种水"),
-    ("冰种",   "种水"),
-    ("糯冰种", "种水"),
-    ("糯种",   "种水"),
-    ("豆种",   "种水"),
-    ("满绿",   "颜色"),
-    ("飘花",   "颜色"),
-    ("紫罗兰", "颜色"),
-    ("黄翡",   "颜色"),
-    ("墨翠",   "颜色"),
-    ("无色",   "颜色"),
-    ("手工雕", "工艺"),
-    ("机雕",   "工艺"),
-    ("素面",   "工艺"),
-    ("观音",   "题材"),
-    ("佛公",   "题材"),
-    ("平安扣", "题材"),
-    ("如意",   "题材"),
-    ("山水",   "题材"),
-    ("花鸟",   "题材"),
-]
+    种子数据内容详见 PRD_v2.md 附录：
+    - 36 种材质（含子类、产地、贵金属克重单价）
+    - 9 种器型（含 spec_fields JSON）
+    - 22 个标签（4个分组）
+    - 4 条系统配置
+    - 2 条贵金属初始市价（18K金780、银25）
+    """
+    # 检查 dict_material 表是否已有数据，有则跳过
+    result = session.execute(text("SELECT COUNT(*) FROM dict_material"))
+    count = result.scalar()
+    if count and count > 0:
+        print(f"[seed_data] 数据库已有 {count} 条材质记录，跳过种子数据插入")
+        return
 
+    print("[seed_data] 插入种子数据...")
 
-def _seed_data(db: Session) -> None:
-    """插入初始种子数据；如果 dict_material 表已有数据则跳过，保证幂等。"""
-    if db.query(DictMaterial).count() > 0:
-        return  # 已有数据，跳过
+    # 导入模型（在函数内导入避免循环依赖）
+    from models import SysConfig, DictMaterial, DictType, DictTag, MetalPrice
 
-    # 1. 插入材质
-    materials = []
-    for idx, name in enumerate(_SEED_MATERIALS, start=1):
-        m = DictMaterial(name=name, sort_order=idx, is_active=True)
-        db.add(m)
-        materials.append(m)
-    db.flush()  # 让 materials 获得 id，供器型外键使用
+    # 1. 36种材质
+    materials = [
+        # 贵金属（3种）
+        DictMaterial(name="18K金", sub_type="780", cost_per_gram=780.0),
+        DictMaterial(name="银", sub_type="990", origin="", cost_per_gram=25.0),
+        DictMaterial(name="k铂金", sub_type="", cost_per_gram=320.0),
+        # 翡翠类（2种）
+        DictMaterial(name="翡翠", origin="缅甸"),
+        DictMaterial(name="和田玉", origin="新疆"),
+        # 水晶类（1种）
+        DictMaterial(name="水晶", sub_type="白水晶"),
+        # 宝石类（PRD附录 11种）
+        DictMaterial(name="珍珠", sub_type="淡水珠", origin="浙江"),
+        DictMaterial(name="朱砂", origin="贵州"),
+        DictMaterial(name="蜜蜡", origin="波罗的海"),
+        DictMaterial(name="碧玺"),
+        DictMaterial(name="青金石", origin="阿富汗"),
+        DictMaterial(name="黑曜石"),
+        DictMaterial(name="金曜石"),
+        DictMaterial(name="金虎眼"),
+        DictMaterial(name="虎眼"),
+        DictMaterial(name="珐彩螺", origin="意大利"),
+        DictMaterial(name="鎉石", origin="梧州"),
+        # 补充常见宝石（19种，总计36种）
+        DictMaterial(name="绿松石", origin="湖北"),
+        DictMaterial(name="红珊瑚", origin="台湾"),
+        DictMaterial(name="琥珀", origin="波罗的海"),
+        DictMaterial(name="玛瑙"),
+        DictMaterial(name="玉髓"),
+        DictMaterial(name="孔雀石"),
+        DictMaterial(name="菱锰矿", origin="阿根廷"),
+        DictMaterial(name="橄榄石"),
+        DictMaterial(name="托帕石"),
+        DictMaterial(name="海蓝宝"),
+        DictMaterial(name="红宝石"),
+        DictMaterial(name="蓝宝石"),
+        DictMaterial(name="祖母绿"),
+        DictMaterial(name="钻石"),
+        DictMaterial(name="珊瑚"),
+        DictMaterial(name="虎睛石"),
+        DictMaterial(name="鹰眼石"),
+        DictMaterial(name="木变石"),
+        DictMaterial(name="彼得石"),
+    ]
+    session.add_all(materials)
 
-    # 2. 为每个材质插入全部通用器型
-    for material in materials:
-        for idx, type_name in enumerate(_SEED_TYPES, start=1):
-            db.add(
-                DictType(
-                    material_id=material.id,
-                    name=type_name,
-                    sort_order=idx,
-                    is_active=True,
-                )
-            )
+    # 2. 9种器型（spec_fields 为 JSON 字符串）
+    types = [
+        DictType(name="手镯", spec_fields='["weight", "bracelet_size"]', sort_order=10),
+        DictType(name="手串", spec_fields='["weight", "bead_count", "bead_diameter"]', sort_order=20),
+        DictType(name="戒指", spec_fields='["weight", "ring_size"]', sort_order=30),
+        DictType(name="项链", spec_fields='["weight", "bead_count", "bead_diameter"]', sort_order=40),
+        DictType(name="吊坠", spec_fields='["weight", "size"]', sort_order=50),
+        DictType(name="耳饰", spec_fields='["weight", "size"]', sort_order=60),
+        DictType(name="挂件", spec_fields='["weight", "size"]', sort_order=70),
+        DictType(name="摆件", spec_fields='["weight", "size"]', sort_order=80),
+        DictType(name="脚链", spec_fields='["weight", "bead_count", "bead_diameter"]', sort_order=90),
+    ]
+    session.add_all(types)
 
-    # 3. 插入标签
-    for idx, (tag_name, group) in enumerate(_SEED_TAGS, start=1):
-        db.add(DictTag(name=tag_name, group_name=group, is_active=True))
+    # 3. 22个标签（4个分组）
+    tags = [
+        # 种水（翡翠用）
+        DictTag(name="玻璃种", group_name="种水"),
+        DictTag(name="冰种", group_name="种水"),
+        DictTag(name="糯冰种", group_name="种水"),
+        DictTag(name="糯种", group_name="种水"),
+        DictTag(name="豆种", group_name="种水"),
+        # 颜色
+        DictTag(name="满绿", group_name="颜色"),
+        DictTag(name="飘花", group_name="颜色"),
+        DictTag(name="紫罗兰", group_name="颜色"),
+        DictTag(name="黄翡", group_name="颜色"),
+        DictTag(name="墨翠", group_name="颜色"),
+        DictTag(name="无色", group_name="颜色"),
+        # 工艺
+        DictTag(name="手工雕", group_name="工艺"),
+        DictTag(name="机雕", group_name="工艺"),
+        DictTag(name="素面", group_name="工艺"),
+        # 题材
+        DictTag(name="观音", group_name="题材"),
+        DictTag(name="佛公", group_name="题材"),
+        DictTag(name="平安扣", group_name="题材"),
+        DictTag(name="如意", group_name="题材"),
+        DictTag(name="山水", group_name="题材"),
+        DictTag(name="花鸟", group_name="题材"),
+        DictTag(name="龙凤", group_name="题材"),
+        DictTag(name="貔貅", group_name="题材"),
+    ]
+    session.add_all(tags)
 
-    db.commit()
-    print(
-        f"[init_db] 种子数据已插入：{len(materials)} 个材质，"
-        f"{len(materials) * len(_SEED_TYPES)} 个器型，"
-        f"{len(_SEED_TAGS)} 个标签。"
-    )
+    # 4. 4条系统配置
+    configs = [
+        SysConfig(key="operating_cost_rate", value="0.05", description="经营成本率（分摊成本的5%）"),
+        SysConfig(key="markup_rate", value="0.30", description="上浮比例（底价的30%）"),
+        SysConfig(key="aging_threshold_days", value="90", description="压货预警阈值（天）"),
+        SysConfig(key="default_alloc_method", value="equal", description="默认成本分摊算法：均摊"),
+    ]
+    session.add_all(configs)
+
+    # 提交以便获取材质ID
+    session.commit()
+
+    # 5. 2条贵金属初始市价（需要材质ID）
+    # 获取18K金和银的材质ID
+    gold = session.execute(
+        text("SELECT id FROM dict_material WHERE name = '18K金'")
+    ).scalar()
+    silver = session.execute(
+        text("SELECT id FROM dict_material WHERE name = '银'")
+    ).scalar()
+
+    from datetime import date
+    metal_prices = [
+        MetalPrice(material_id=gold, price_per_gram=780.0, effective_date=date.today()),
+        MetalPrice(material_id=silver, price_per_gram=25.0, effective_date=date.today()),
+    ]
+    session.add_all(metal_prices)
+
+    session.commit()
+    print("[seed_data] 种子数据插入完成")
 
 
 def init_db() -> None:
@@ -123,8 +215,34 @@ def init_db() -> None:
     初始化数据库：
     1. 根据 ORM 模型创建所有表（如果已存在则跳过）
     2. 插入种子数据（如果表为空）
+
+    幂等：可安全重复调用。
     """
+    from models import Base  # 延迟导入，避免循环依赖
+
+    # 删除所有表（确保表结构与模型一致）
+    Base.metadata.drop_all(bind=engine)
+    # 创建所有表（根据 TECH_SPEC.md v2 的14张表）
     Base.metadata.create_all(bind=engine)
-    with SessionLocal() as db:
-        _seed_data(db)
-    print(f"[init_db] 数据库就绪：{DB_PATH}")
+    print(f"[init_db] 表结构创建/更新完成（基于 TECH_SPEC.md v2）")
+
+    # 插入种子数据
+    with SessionLocal() as session:
+        seed_data(session)
+
+    print(f"[init_db] 数据库初始化完成：{DB_PATH}")
+
+# ──────────────────────────────────────────────
+# 直接执行测试
+# ──────────────────────────────────────────────
+
+if __name__ == "__main__":
+    # 测试数据库连接
+    init_db()
+    print("数据库引擎测试通过")
+
+    # 验证引擎
+    with engine.connect() as conn:
+        result = conn.execute(text("SELECT sqlite_version()"))
+        version = result.scalar()
+        print(f"SQLite 版本: {version}")

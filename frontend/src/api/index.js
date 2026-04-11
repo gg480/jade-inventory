@@ -117,6 +117,12 @@ const items = {
   updateItem: (id, data) => api.put(`/items/${id}`, data),
   // 删除
   deleteItem: (id) => api.delete(`/items/${id}`),
+  // 图片管理
+  uploadItemImage: (itemId, formData) => api.post(`/items/${itemId}/images`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  deleteItemImage: (itemId, imageId) => api.delete(`/items/${itemId}/images/${imageId}`),
+  setCoverImage: (itemId, imageId) => api.put(`/items/${itemId}/images/${imageId}/cover`),
 }
 
 const sales = {

@@ -13,13 +13,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, selectinload
 
 from database import get_db
-from models import Item, SaleRecord
+from models import BundleSale, Item, SaleRecord
 from schemas import (
     ApiResponse,
-    Pagination,
-    SaleRecordCreate,
+    PaginationMeta,
+    SaleCreate,
     SaleRecordListOut,
     SaleRecordOut,
+    BundleSaleCreate,
+    BundleSaleOut,
 )
 
 router = APIRouter(prefix="/sales", tags=["销售记录"])
@@ -33,31 +35,94 @@ _VALID_CHANNELS = {"store", "wechat", "ecommerce"}
 # ──────────────────────────────────────────────
 
 def _load_options():
-    """SaleRecord 预加载：item → material（避免 N+1）。"""
+    """SaleRecord 预加载：item → material, customer（避免 N+1）。"""
     return [
         selectinload(SaleRecord.item).selectinload(Item.material),
+        selectinload(SaleRecord.customer),
     ]
 
 
 def _to_sale_out(record: SaleRecord) -> SaleRecordOut:
-    """将 ORM SaleRecord 转为响应体，计算毛利和毛利率。"""
+    """将 ORM SaleRecord 转为响应体，计算毛利。"""
     item = record.item
-    gross_profit = record.actual_price - item.cost_price
-    # 避免除零（actual_price 已由 Pydantic 校验 gt=0，此处仅防御性处理）
-    gross_margin = gross_profit / record.actual_price if record.actual_price else 0.0
+    # 使用 allocated_cost 计算毛利（对于通货）或 cost_price（对于高货）
+    cost = item.allocated_cost if item.allocated_cost is not None else item.cost_price
+    if cost is None:
+        cost = 0.0
+    gross_profit = record.actual_price - cost
     return SaleRecordOut(
         id=record.id,
+        sale_no=record.sale_no,
         item_id=record.item_id,
-        sku_code=item.sku_code,
-        material_name=item.material.name,
+        item_sku=item.sku_code,
+        item_name=item.name,
         actual_price=record.actual_price,
         channel=record.channel,
         sale_date=record.sale_date,
-        customer_note=record.customer_note,
+        customer_id=record.customer_id,
+        customer_name=record.customer.name if record.customer else None,
+        bundle_id=record.bundle_id,
+        note=record.note,
         created_at=record.created_at,
-        cost_price=item.cost_price,
         gross_profit=round(gross_profit, 2),
-        gross_margin=round(gross_margin, 4),
+    )
+
+
+def _generate_bundle_no(sale_date: datetime.date, db: Session) -> str:
+    """生成套装销售编号：b20250410001 格式。"""
+    date_prefix = sale_date.strftime("%Y%m%d")
+    pattern = f"b{date_prefix}%"
+    last_no = db.query(BundleSale.bundle_no).filter(
+        BundleSale.bundle_no.like(pattern)
+    ).order_by(BundleSale.bundle_no.desc()).first()
+    if last_no:
+        last_seq = int(last_no[0][-3:])  # 提取最后三位
+        next_seq = last_seq + 1
+    else:
+        next_seq = 1
+    return f"b{date_prefix}{next_seq:03d}"
+
+
+def _to_bundle_out(bundle: BundleSale) -> BundleSaleOut:
+    """将 ORM BundleSale 转为响应体，包含销售记录列表及毛利计算。"""
+    sale_records_out = []
+    for record in bundle.sale_records:
+        item = record.item
+        # 使用 allocated_cost 计算毛利（对于通货）或 cost_price（对于高货）
+        cost = item.allocated_cost if item.allocated_cost is not None else item.cost_price
+        if cost is None:
+            cost = 0.0
+        gross_profit = record.actual_price - cost
+        sale_out = SaleRecordOut(
+            id=record.id,
+            sale_no=record.sale_no,
+            item_id=record.item_id,
+            item_sku=item.sku_code,
+            item_name=item.name,
+            actual_price=record.actual_price,
+            channel=record.channel,
+            sale_date=record.sale_date,
+            customer_id=record.customer_id,
+            customer_name=record.customer.name if record.customer else None,
+            bundle_id=record.bundle_id,
+            note=record.note,
+            created_at=record.created_at,
+            gross_profit=round(gross_profit, 2),
+        )
+        sale_records_out.append(sale_out)
+
+    return BundleSaleOut(
+        id=bundle.id,
+        bundle_no=bundle.bundle_no,
+        total_price=bundle.total_price,
+        alloc_method=bundle.alloc_method,
+        sale_date=bundle.sale_date,
+        channel=bundle.channel,
+        customer_id=bundle.customer_id,
+        customer_name=bundle.customer.name if bundle.customer else None,
+        note=bundle.note,
+        created_at=bundle.created_at,
+        sale_records=sale_records_out,
     )
 
 
@@ -69,7 +134,7 @@ def _to_sale_out(record: SaleRecord) -> SaleRecordOut:
     "",
     response_model=ApiResponse[SaleRecordListOut],
     summary="销售记录列表",
-    description="分页查询销售记录；支持按渠道和成交日期范围筛选。",
+    description="分页查询销售记录；支持按渠道、成交日期范围和客户ID筛选。",
 )
 def list_sales(
     page: int = Query(1, ge=1, description="页码，从 1 开始"),
@@ -77,6 +142,7 @@ def list_sales(
     channel: Optional[str] = Query(None, description="渠道筛选：store / wechat / ecommerce"),
     start_date: Optional[datetime.date] = Query(None, description="成交日期起（含），格式 YYYY-MM-DD"),
     end_date: Optional[datetime.date] = Query(None, description="成交日期止（含），格式 YYYY-MM-DD"),
+    customer_id: Optional[int] = Query(None, description="客户ID筛选"),
     db: Session = Depends(get_db),
 ) -> ApiResponse[SaleRecordListOut]:
     filters = []
@@ -86,6 +152,8 @@ def list_sales(
         filters.append(SaleRecord.sale_date >= start_date)
     if end_date is not None:
         filters.append(SaleRecord.sale_date <= end_date)
+    if customer_id is not None:
+        filters.append(SaleRecord.customer_id == customer_id)
 
     # 计总数（不带 selectinload）
     total = db.query(SaleRecord).filter(*filters).count()
@@ -104,7 +172,7 @@ def list_sales(
     return ApiResponse(
         data=SaleRecordListOut(
             items=[_to_sale_out(r) for r in records],
-            pagination=Pagination(total=total, page=page, size=size, pages=pages),
+            pagination=PaginationMeta(total=total, page=page, size=size, pages=pages),
         )
     )
 
@@ -120,7 +188,7 @@ def list_sales(
     ),
 )
 def create_sale(
-    body: SaleRecordCreate,
+    body: SaleCreate,
     db: Session = Depends(get_db),
 ) -> ApiResponse[SaleRecordOut]:
     # 1. 校验渠道合法性
@@ -140,17 +208,32 @@ def create_sale(
     if not item:
         raise HTTPException(status_code=404, detail="货品不存在或已删除")
 
-    # 3. 校验货品未售出（幂等保护）
-    if item.status == "sold":
-        raise HTTPException(status_code=400, detail="该货品已售出，不可重复出库")
+    # 3. 校验货品在库（非 in_stock 状态不可销售）
+    if item.status != "in_stock":
+        raise HTTPException(status_code=400, detail=f"货品状态为「{item.status}」，不可销售")
 
-    # 4. 在同一事务中创建销售记录 + 更新货品状态
+    # 4. 生成销售单号 s20250410001 格式
+    date_prefix = body.sale_date.strftime("%Y%m%d")
+    pattern = f"s{date_prefix}%"
+    last_no = db.query(SaleRecord.sale_no).filter(
+        SaleRecord.sale_no.like(pattern)
+    ).order_by(SaleRecord.sale_no.desc()).first()
+    if last_no:
+        last_seq = int(last_no[0][-3:])  # 提取最后三位
+        next_seq = last_seq + 1
+    else:
+        next_seq = 1
+    sale_no = f"s{date_prefix}{next_seq:03d}"
+
+    # 5. 在同一事务中创建销售记录 + 更新货品状态
     record = SaleRecord(
+        sale_no=sale_no,
         item_id=body.item_id,
         actual_price=body.actual_price,
         channel=body.channel,
         sale_date=body.sale_date,
-        customer_note=body.customer_note,
+        customer_id=body.customer_id,
+        note=body.note,
     )
     db.add(record)
     item.status = "sold"   # 联动更新，与 db.add(record) 同一 session
@@ -166,3 +249,134 @@ def create_sale(
         .one()
     )
     return ApiResponse(data=_to_sale_out(record))
+
+
+@router.post(
+    "/bundle",
+    response_model=ApiResponse[BundleSaleOut],
+    status_code=status.HTTP_201_CREATED,
+    summary="创建套装销售记录",
+    description=(
+        "一次交易包含多件货品，按比例分摊总价。"
+        "所有货品状态同时改为 sold。整个操作在单一事务中完成。"
+    ),
+)
+def create_bundle_sale(
+    body: BundleSaleCreate,
+    db: Session = Depends(get_db),
+) -> ApiResponse[BundleSaleOut]:
+    # 1. 校验分摊方法（目前只支持 by_ratio）
+    if body.alloc_method != "by_ratio":
+        raise HTTPException(
+            status_code=400,
+            detail=f"暂不支持的分摊方法「{body.alloc_method}」，目前仅支持 by_ratio",
+        )
+
+    # 2. 校验渠道合法性
+    if body.channel not in _VALID_CHANNELS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不合法的销售渠道「{body.channel}」，允许值：{sorted(_VALID_CHANNELS)}",
+        )
+
+    # 3. 校验所有货品存在、未删除、在库
+    items = (
+        db.query(Item)
+        .filter(Item.id.in_(body.item_ids), Item.is_deleted == False)
+        .all()
+    )
+    if len(items) != len(body.item_ids):
+        # 找出缺失的 ID
+        found_ids = {item.id for item in items}
+        missing_ids = [iid for iid in body.item_ids if iid not in found_ids]
+        raise HTTPException(
+            status_code=404,
+            detail=f"部分货品不存在或已删除：{missing_ids}",
+        )
+
+    # 检查状态
+    not_in_stock = [item for item in items if item.status != "in_stock"]
+    if not_in_stock:
+        bad_ids = [item.id for item in not_in_stock]
+        raise HTTPException(
+            status_code=400,
+            detail=f"货品 {bad_ids} 状态不是 in_stock，不可销售",
+        )
+
+    # 4. 生成套装编号
+    bundle_no = _generate_bundle_no(body.sale_date, db)
+
+    # 5. 计算分摊价格（by_ratio）
+    total_selling_price = sum(item.selling_price for item in items)
+    if total_selling_price == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="所有货品零售价总和为0，无法按比例分摊",
+        )
+
+    allocated_prices = []
+    for item in items:
+        ratio = item.selling_price / total_selling_price
+        allocated_price = round(body.total_price * ratio, 2)
+        allocated_prices.append(allocated_price)
+
+    # 6. 在同一事务中创建套装记录 + 各件销售记录 + 更新货品状态
+    bundle = BundleSale(
+        bundle_no=bundle_no,
+        total_price=body.total_price,
+        alloc_method=body.alloc_method,
+        sale_date=body.sale_date,
+        channel=body.channel,
+        customer_id=body.customer_id,
+        note=body.note,
+    )
+    db.add(bundle)
+    db.flush()  # 获取 bundle.id 用于后续 sale_record
+
+    # 为每件货品创建销售记录
+    sale_records = []
+    # 生成连续的销售编号
+    date_prefix = body.sale_date.strftime("%Y%m%d")
+    pattern = f"s{date_prefix}%"
+    last_no = db.query(SaleRecord.sale_no).filter(
+        SaleRecord.sale_no.like(pattern)
+    ).order_by(SaleRecord.sale_no.desc()).first()
+    if last_no:
+        last_seq = int(last_no[0][-3:])
+        next_seq = last_seq + 1
+    else:
+        next_seq = 1
+
+    # 为套装中的每件货品生成销售编号
+    for idx, (item, allocated_price) in enumerate(zip(items, allocated_prices)):
+        seq = next_seq + idx
+        sale_no = f"s{date_prefix}{seq:03d}"
+
+        record = SaleRecord(
+            sale_no=sale_no,
+            item_id=item.id,
+            actual_price=allocated_price,
+            channel=body.channel,
+            sale_date=body.sale_date,
+            customer_id=body.customer_id,
+            bundle_id=bundle.id,
+            note=body.note + f" (套装销售 {bundle_no})" if body.note else f"套装销售 {bundle_no}",
+        )
+        db.add(record)
+        sale_records.append(record)
+        # 更新货品状态
+        item.status = "sold"
+
+    db.commit()
+
+    # 7. 重新查询以带入预加载的关联数据
+    bundle = (
+        db.query(BundleSale)
+        .options(
+            selectinload(BundleSale.customer),
+            selectinload(BundleSale.sale_records).selectinload(SaleRecord.item).selectinload(Item.material),
+        )
+        .filter(BundleSale.id == bundle.id)
+        .one()
+    )
+    return ApiResponse(data=_to_bundle_out(bundle))

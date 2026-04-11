@@ -73,8 +73,14 @@ const router = createRouter({
 
 // 全局前置守卫：设置页面标题
 router.beforeEach((to, from, next) => {
+  console.log(`路由切换: ${from.path} -> ${to.path}`)
   document.title = to.meta.title ? `${to.meta.title} - 玉器店进销存` : '玉器店进销存'
   next()
+})
+
+// 路由错误处理
+router.onError((error) => {
+  console.error('路由错误:', error)
 })
 
 export default router

@@ -1,5 +1,5 @@
 """
-字典管理路由 — 材质 / 器型 / 标签三级分类的 CRUD。
+字典管理路由 — 材质 / 器型 / 标签 / 系统配置的 CRUD。
 
 所有删除操作均为软删除（is_active = false），不物理删除，
 保证已关联货品的历史数据不受影响。
@@ -8,13 +8,14 @@
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import DictMaterial, DictTag, DictType
+from models import DictMaterial, DictTag, DictType, SysConfig
 from schemas import (
     ApiResponse,
+    ConfigOut,
+    ConfigUpdate,
     DictMaterialCreate,
     DictMaterialOut,
     DictMaterialUpdate,
@@ -47,6 +48,14 @@ def list_materials(
     if not include_inactive:
         q = q.filter(DictMaterial.is_active == True)
     materials = q.order_by(DictMaterial.sort_order, DictMaterial.id).all()
+    # 调试：打印第一个材质的属性
+    if materials:
+        m = materials[0]
+        print(f"[DEBUG] First material: id={m.id}, name={m.name}, sub_type={m.sub_type}, origin={m.origin}, cost_per_gram={m.cost_per_gram}")
+        print(f"[DEBUG] Material object dict: {m.__dict__ if hasattr(m, '__dict__') else 'no __dict__'}")
+        # 测试序列化
+        out = DictMaterialOut.model_validate(m)
+        print(f"[DEBUG] Serialized dict: {out.model_dump()}")
     return ApiResponse(data=[DictMaterialOut.model_validate(m) for m in materials])
 
 
@@ -62,8 +71,20 @@ def create_material(
 ) -> ApiResponse[DictMaterialOut]:
     # 名称唯一性校验（包含已停用的，防止激活冲突）
     if db.query(DictMaterial).filter(DictMaterial.name == body.name).first():
-        raise HTTPException(status_code=400, detail=f"材质名称「{body.name}」已存在")
-    m = DictMaterial(name=body.name, sort_order=body.sort_order, is_active=True)
+        raise HTTPException(
+            status_code=400,
+            detail={"code": 400, "message": f"材质「{body.name}」已存在"}
+        )
+    print(f"[DEBUG] Creating material: name={body.name}, sub_type={body.sub_type}, origin={body.origin}, cost_per_gram={body.cost_per_gram}, sort_order={body.sort_order}")
+    print(f"[DEBUG] Body dict: {body.model_dump()}")
+    m = DictMaterial(
+        name=body.name,
+        sub_type=body.sub_type,
+        origin=body.origin,
+        cost_per_gram=body.cost_per_gram,
+        sort_order=body.sort_order,
+        is_active=True,
+    )
     db.add(m)
     db.commit()
     db.refresh(m)
@@ -86,8 +107,17 @@ def update_material(
     # 名称改变时检查重复（排除自身）
     if body.name is not None and body.name != m.name:
         if db.query(DictMaterial).filter(DictMaterial.name == body.name).first():
-            raise HTTPException(status_code=400, detail=f"材质名称「{body.name}」已存在")
+            raise HTTPException(
+                status_code=400,
+                detail={"code": 400, "message": f"材质「{body.name}」已存在"}
+            )
         m.name = body.name
+    if body.sub_type is not None:
+        m.sub_type = body.sub_type
+    if body.origin is not None:
+        m.origin = body.origin
+    if body.cost_per_gram is not None:
+        m.cost_per_gram = body.cost_per_gram
     if body.sort_order is not None:
         m.sort_order = body.sort_order
     if body.is_active is not None:
@@ -115,26 +145,23 @@ def delete_material(
 
 
 # ══════════════════════════════════════════════
-# 器型（dict_type）
+# 器型（dict_type）— 独立于材质，跨材质通用
 # ══════════════════════════════════════════════
 
 @router.get(
     "/types",
     response_model=ApiResponse[List[DictTypeOut]],
     summary="获取器型列表",
-    description="支持按 material_id 筛选；默认只返回启用的。",
+    description="返回所有器型；默认只返回启用的，传 include_inactive=true 返回全部。",
 )
 def list_types(
-    material_id: Optional[int] = Query(None, description="按材质 ID 筛选"),
     include_inactive: bool = Query(False, description="是否包含已停用的器型"),
     db: Session = Depends(get_db),
 ) -> ApiResponse[List[DictTypeOut]]:
     q = db.query(DictType)
-    if material_id is not None:
-        q = q.filter(DictType.material_id == material_id)
     if not include_inactive:
         q = q.filter(DictType.is_active == True)
-    types = q.order_by(DictType.material_id, DictType.sort_order, DictType.id).all()
+    types = q.order_by(DictType.sort_order, DictType.id).all()
     return ApiResponse(data=[DictTypeOut.model_validate(t) for t in types])
 
 
@@ -148,25 +175,15 @@ def create_type(
     body: DictTypeCreate,
     db: Session = Depends(get_db),
 ) -> ApiResponse[DictTypeOut]:
-    # 验证材质存在
-    if not db.get(DictMaterial, body.material_id):
-        raise HTTPException(status_code=404, detail="材质不存在")
-    # 同一材质下名称唯一
-    exists = (
-        db.query(DictType)
-        .filter(
-            and_(DictType.material_id == body.material_id, DictType.name == body.name)
-        )
-        .first()
-    )
-    if exists:
+    # 名称唯一性校验（包含已停用的，防止激活冲突）
+    if db.query(DictType).filter(DictType.name == body.name).first():
         raise HTTPException(
             status_code=400,
-            detail=f"该材质下器型名称「{body.name}」已存在",
+            detail={"code": 400, "message": f"器型「{body.name}」已存在"}
         )
     t = DictType(
-        material_id=body.material_id,
         name=body.name,
+        spec_fields=body.spec_fields,
         sort_order=body.sort_order,
         is_active=True,
     )
@@ -190,23 +207,14 @@ def update_type(
     if not t:
         raise HTTPException(status_code=404, detail="器型不存在")
     if body.name is not None and body.name != t.name:
-        exists = (
-            db.query(DictType)
-            .filter(
-                and_(
-                    DictType.material_id == t.material_id,
-                    DictType.name == body.name,
-                    DictType.id != type_id,
-                )
-            )
-            .first()
-        )
-        if exists:
+        if db.query(DictType).filter(DictType.name == body.name).first():
             raise HTTPException(
                 status_code=400,
-                detail=f"该材质下器型名称「{body.name}」已存在",
+                detail={"code": 400, "message": f"器型「{body.name}」已存在"}
             )
         t.name = body.name
+    if body.spec_fields is not None:
+        t.spec_fields = body.spec_fields
     if body.sort_order is not None:
         t.sort_order = body.sort_order
     if body.is_active is not None:
@@ -268,7 +276,10 @@ def create_tag(
     db: Session = Depends(get_db),
 ) -> ApiResponse[DictTagOut]:
     if db.query(DictTag).filter(DictTag.name == body.name).first():
-        raise HTTPException(status_code=400, detail=f"标签名称「{body.name}」已存在")
+        raise HTTPException(
+            status_code=400,
+            detail={"code": 400, "message": f"标签「{body.name}」已存在"}
+        )
     tag = DictTag(name=body.name, group_name=body.group_name, is_active=True)
     db.add(tag)
     db.commit()
@@ -295,7 +306,10 @@ def update_tag(
             .filter(DictTag.name == body.name, DictTag.id != tag_id)
             .first()
         ):
-            raise HTTPException(status_code=400, detail=f"标签名称「{body.name}」已存在")
+            raise HTTPException(
+                status_code=400,
+                detail={"code": 400, "message": f"标签「{body.name}」已存在"}
+            )
         tag.name = body.name
     if body.group_name is not None:
         tag.group_name = body.group_name
@@ -321,3 +335,44 @@ def delete_tag(
     tag.is_active = False
     db.commit()
     return ApiResponse(message="已停用")
+
+
+# ══════════════════════════════════════════════
+# 系统配置（sys_config）
+# ══════════════════════════════════════════════
+
+router_config = APIRouter(prefix="/config", tags=["系统配置"])
+
+
+@router_config.get(
+    "/",
+    response_model=ApiResponse[List[ConfigOut]],
+    summary="获取所有系统配置",
+)
+def list_configs(
+    db: Session = Depends(get_db),
+) -> ApiResponse[List[ConfigOut]]:
+    configs = db.query(SysConfig).order_by(SysConfig.key).all()
+    return ApiResponse(data=[ConfigOut.model_validate(c) for c in configs])
+
+
+@router_config.put(
+    "/{key}",
+    response_model=ApiResponse[ConfigOut],
+    summary="更新系统配置",
+)
+def update_config(
+    key: str,
+    body: ConfigUpdate,
+    db: Session = Depends(get_db),
+) -> ApiResponse[ConfigOut]:
+    config = db.query(SysConfig).filter(SysConfig.key == key).first()
+    if not config:
+        raise HTTPException(status_code=404, detail="配置项不存在")
+    config.value = body.value
+    db.commit()
+    db.refresh(config)
+    return ApiResponse(data=ConfigOut.model_validate(config))
+
+
+# 配置路由已直接挂载到主应用（main.py）

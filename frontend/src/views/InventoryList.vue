@@ -430,10 +430,10 @@ onMounted(() => {
               <th class="w-32">编号</th>
               <th>材质</th>
               <th>器型</th>
-              <th class="w-24 text-right">进价</th>
+              <th class="w-24 text-right">成本价</th>
               <th class="w-24 text-right">售价</th>
               <th class="w-24">状态</th>
-              <th class="w-32">在库天数</th>
+              <th class="w-32">入库日期</th>
               <th class="w-48 text-right">操作</th>
             </tr>
           </thead>
@@ -466,8 +466,8 @@ onMounted(() => {
                 </span>
               </td>
               <td>
-                <span v-if="item.age_days !== null" class="text-gray-600">
-                  {{ item.age_days }}天
+                <span v-if="item.purchase_date" class="text-gray-600">
+                  {{ item.purchase_date }}
                 </span>
                 <span v-else class="text-gray-400">-</span>
               </td>
@@ -539,7 +539,7 @@ onMounted(() => {
               <div class="text-sm text-gray-900">{{ item.type_name || '-' }}</div>
             </div>
             <div>
-              <div class="text-xs text-gray-500">进价</div>
+              <div class="text-xs text-gray-500">成本价</div>
               <div class="text-sm font-medium text-gray-900">¥{{ item.cost_price.toFixed(2) }}</div>
             </div>
             <div>
@@ -564,7 +564,7 @@ onMounted(() => {
               </span>
             </div>
             <div class="text-xs text-gray-600">
-              在库{{ item.age_days !== null ? `${item.age_days}天` : '-' }}
+              入库{{ item.purchase_date ? item.purchase_date : '-' }}
             </div>
           </div>
 

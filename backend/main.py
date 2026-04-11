@@ -12,7 +12,15 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from database import init_db
-from routers import dicts, items, sales, dashboard
+from routers.dicts import router as dicts_router
+from routers.dicts import router_config
+from routers.batches import router as batches_router
+from routers.items import router as items_router
+from routers.sales import router as sales_router
+from routers.customers import router as customers_router
+from routers.suppliers import router as suppliers_router
+from routers.dashboard import router as dashboard_router
+from routers.metal_prices import router as metal_prices_router
 
 
 @asynccontextmanager
@@ -62,10 +70,15 @@ app.add_middleware(
 # ── API 路由（统一前缀 /api/v1）──
 _API_PREFIX = "/api/v1"
 
-app.include_router(dicts.router,      prefix=_API_PREFIX)
-app.include_router(items.router,      prefix=_API_PREFIX)
-app.include_router(sales.router,      prefix=_API_PREFIX)
-app.include_router(dashboard.router,  prefix=_API_PREFIX)
+app.include_router(dicts_router,      prefix=_API_PREFIX)
+app.include_router(router_config,     prefix=_API_PREFIX)
+app.include_router(batches_router,    prefix=_API_PREFIX)
+app.include_router(items_router,      prefix=_API_PREFIX)
+app.include_router(sales_router,      prefix=_API_PREFIX)
+app.include_router(customers_router,  prefix=_API_PREFIX)
+app.include_router(suppliers_router,   prefix=_API_PREFIX)
+app.include_router(dashboard_router,    prefix=_API_PREFIX)
+app.include_router(metal_prices_router,  prefix=_API_PREFIX)
 
 
 # ── 健康检查 ──
@@ -74,7 +87,3 @@ def health():
     return {"status": "ok"}
 
 
-# ── 生产模式：托管前端构建产物 ──
-_STATIC_DIR = Path(__file__).parent / "static"
-if _STATIC_DIR.exists():
-    app.mount("/", StaticFiles(directory=str(_STATIC_DIR), html=True), name="static")

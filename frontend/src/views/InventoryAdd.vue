@@ -2,12 +2,14 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../api'
+import { useDictStore } from '../store/dict'
 
 const props = defineProps({
   id: { type: String, default: null }
 })
 
 const router = useRouter()
+const dictStore = useDictStore()
 const mode = ref('single') // 'single' 或 'batch'
 const isEditMode = computed(() => !!props.id)
 const loading = ref(false)
@@ -61,23 +63,26 @@ const batchForm = reactive({
 })
 
 // 字典数据
-const materials = ref([])
+const materials = computed(() => dictStore.materials.value)
 const types = ref([])
-const tags = ref([])
+const tags = computed(() => dictStore.tags.value)
 
-// 获取字典数据
+// 获取字典数据（使用缓存）
 async function fetchDicts() {
   try {
-    // 获取材质
-    const materialData = await api.dicts.getMaterials()
-    materials.value = materialData
-
-    // 获取标签
-    const tagData = await api.dicts.getTags()
-    tags.value = tagData
+    console.log('开始获取字典数据...')
+    // 获取材质（带缓存）
+    const materialsData = await dictStore.loadMaterials()
+    console.log('材质数据加载成功:', materialsData.length, '条')
+    // 获取标签（带缓存）
+    const tagsData = await dictStore.loadTags()
+    console.log('标签数据加载成功:', tagsData.length, '条')
+    console.log('字典数据获取完成')
+    return { materialsData, tagsData }
   } catch (error) {
     console.error('获取字典数据失败:', error)
     alert(`加载字典数据失败: ${error.message}\n请确保后端服务正在运行，然后刷新页面。`)
+    throw error // 重新抛出错误，让上层处理
   }
 }
 
@@ -113,7 +118,7 @@ async function loadItem() {
   }
 }
 
-// 根据材质ID更新器型列表
+// 根据材质ID更新器型列表（使用缓存）
 async function updateTypesByMaterial(materialId, shouldClearType = true) {
   // 如果需要，清除当前表单的器型选择
   if (shouldClearType) {
@@ -129,7 +134,7 @@ async function updateTypesByMaterial(materialId, shouldClearType = true) {
     return
   }
   try {
-    const typeData = await api.dicts.getTypes(materialId)
+    const typeData = await dictStore.loadTypesByMaterial(materialId)
     types.value = typeData
   } catch (error) {
     console.error('获取器型失败:', error)
@@ -259,20 +264,31 @@ function generateSku() {
 // 计算标签分组
 const tagGroups = computed(() => {
   const groups = {}
-  tags.value.forEach(tag => {
-    if (!groups[tag.group_name || '其他']) {
-      groups[tag.group_name || '其他'] = []
+  const tagList = tags // tags是计算属性，返回数组
+  if (!tagList || !Array.isArray(tagList)) {
+    return groups
+  }
+  tagList.forEach(tag => {
+    const groupName = tag.group_name || '其他'
+    if (!groups[groupName]) {
+      groups[groupName] = []
     }
-    groups[tag.group_name || '其他'].push(tag)
+    groups[groupName].push(tag)
   })
   return groups
 })
 
 onMounted(async () => {
-  await fetchDicts()
-  if (isEditMode.value) {
-    mode.value = 'single' // 编辑模式固定为单件
-    await loadItem()
+  console.log('InventoryAdd组件挂载，模式:', mode.value, '编辑模式:', isEditMode.value)
+  try {
+    await fetchDicts()
+    if (isEditMode.value) {
+      mode.value = 'single' // 编辑模式固定为单件
+      await loadItem()
+    }
+    console.log('组件初始化完成')
+  } catch (error) {
+    console.error('组件初始化失败:', error)
   }
 })
 </script>
