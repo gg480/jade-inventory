@@ -69,22 +69,37 @@ def _to_sale_out(record: SaleRecord) -> SaleRecordOut:
     )
 
 
-def _generate_bundle_no(sale_date: datetime.date, db: Session) -> str:
-    """生成套装销售编号：b20250410001 格式。"""
-    date_prefix = sale_date.strftime("%Y%m%d")
-    pattern = f"b{date_prefix}%"
-    last_no = db.query(BundleSale.bundle_no).filter(
-        BundleSale.bundle_no.like(pattern)
-    ).order_by(BundleSale.bundle_no.desc()).first()
+def _generate_sequential_no(
+    prefix: str,
+    date: datetime.date,
+    model_class,
+    no_field: str,
+    db: Session,
+    label: str = "编号",
+) -> str:
+    """生成序号编号：{prefix}{YYYYMMDD}{NNN} 格式，如 s20250410001、b20250410001。
+
+    查询数据库中同前缀+日期的最后一条记录，自增序号后返回完整编号。
+    """
+    date_prefix = date.strftime("%Y%m%d")
+    pattern = f"{prefix}{date_prefix}%"
+    last_no = db.query(no_field).filter(
+        no_field.like(pattern)
+    ).order_by(no_field.desc()).first()
     if last_no:
-        seq_str = last_no[0][len(f"b{date_prefix}"):]
+        seq_str = last_no[0][len(f"{prefix}{date_prefix}"):]
         last_seq = int(seq_str) if seq_str.isdigit() else 0
         next_seq = last_seq + 1
     else:
         next_seq = 1
     if next_seq > 9999:
-        raise HTTPException(status_code=500, detail="当日套装编号已超过9999上限")
-    return f"b{date_prefix}{next_seq:03d}"
+        raise HTTPException(status_code=500, detail=f"当日{label}已超过9999上限")
+    return f"{prefix}{date_prefix}{next_seq:03d}"
+
+
+def _generate_bundle_no(sale_date: datetime.date, db: Session) -> str:
+    """生成套装销售编号：b20250410001 格式。"""
+    return _generate_sequential_no("b", sale_date, BundleSale, BundleSale.bundle_no, db, label="套装编号")
 
 
 def _to_bundle_out(bundle: BundleSale) -> BundleSaleOut:
@@ -218,21 +233,7 @@ def create_sale(
         raise HTTPException(status_code=400, detail=f"货品状态为「{item.status}」，不可销售")
 
     # 4. 生成销售单号 s20250410001 格式
-    date_prefix = body.sale_date.strftime("%Y%m%d")
-    pattern = f"s{date_prefix}%"
-    last_no = db.query(SaleRecord.sale_no).filter(
-        SaleRecord.sale_no.like(pattern)
-    ).order_by(SaleRecord.sale_no.desc()).first()
-    if last_no:
-        # 支持动态位数：先去掉日期前缀，取剩余数字部分
-        seq_str = last_no[0][len(f"s{date_prefix}"):]
-        last_seq = int(seq_str) if seq_str.isdigit() else 0
-        next_seq = last_seq + 1
-    else:
-        next_seq = 1
-    if next_seq > 9999:
-        raise HTTPException(status_code=500, detail="当日销售编号已超过9999上限")
-    sale_no = f"s{date_prefix}{next_seq:03d}"
+    sale_no = _generate_sequential_no("s", body.sale_date, SaleRecord, SaleRecord.sale_no, db, label="销售编号")
 
     # 5. 在同一事务中创建销售记录 + 更新货品状态
     record = SaleRecord(
@@ -396,18 +397,10 @@ def create_bundle_sale(
 
     # 为每件货品创建销售记录
     sale_records = []
-    # 生成连续的销售编号
+    # 生成连续的销售编号（获取基础序号，后续逐件递增）
+    first_sale_no = _generate_sequential_no("s", body.sale_date, SaleRecord, SaleRecord.sale_no, db, label="销售编号")
     date_prefix = body.sale_date.strftime("%Y%m%d")
-    pattern = f"s{date_prefix}%"
-    last_no = db.query(SaleRecord.sale_no).filter(
-        SaleRecord.sale_no.like(pattern)
-    ).order_by(SaleRecord.sale_no.desc()).first()
-    if last_no:
-        seq_str = last_no[0][len(f"s{date_prefix}"):]
-        last_seq = int(seq_str) if seq_str.isdigit() else 0
-        next_seq = last_seq + 1
-    else:
-        next_seq = 1
+    next_seq = int(first_sale_no[len(f"s{date_prefix}"):])
 
     # 为套装中的每件货品生成销售编号
     for idx, (item, allocated_price) in enumerate(zip(items, allocated_prices)):

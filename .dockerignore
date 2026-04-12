@@ -1,0 +1,15 @@
+node_modules
+__pycache__
+*.pyc
+.git
+.gitignore
+data/
+*.md
+.vscode
+.idea
+CLAUDE*.md
+test_api.sh
+backend/test_*.py
+backend/validate_*.py
+frontend/node_modules
+frontend/dist

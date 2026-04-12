@@ -267,6 +267,12 @@ async function batchLendOut() {
   }
 }
 
+// 批量打印标签
+function batchPrintLabels() {
+  const ids = Array.from(selectedItems.value).join(',')
+  window.open(`/labels?ids=${ids}`, '_blank')
+}
+
 // 导出库存Excel
 async function handleExportInventory() {
   try {
@@ -510,6 +516,13 @@ onMounted(() => {
             class="btn btn-success text-sm flex-1 sm:flex-none"
           >
             套装出库
+          </button>
+          <button
+            v-if="selectedItems.size > 0"
+            @click="batchPrintLabels"
+            class="btn btn-secondary text-sm flex-1 sm:flex-none"
+          >
+            打印标签
           </button>
           <button
             v-if="selectedItems.size > 0"

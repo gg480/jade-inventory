@@ -269,7 +269,12 @@ def stock_aging(
 
     today = datetime.date.today()
 
-    # 查询所有在库货品
+    # 构建库龄表达式：优先 purchase_date，无则用 created_at 的日期部分
+    # 使用 SQLite julianday 函数在数据库层计算天数差
+    ref_date_expr = func.coalesce(Item.purchase_date, func.date(Item.created_at))
+    age_expr = func.julianday('now') - func.julianday(ref_date_expr)
+
+    # 在数据库层过滤库龄 >= min_days 的在库货品（避免加载全部数据到内存）
     items = (
         db.query(Item)
         .options(
@@ -277,7 +282,11 @@ def stock_aging(
             selectinload(Item.type),
             selectinload(Item.images),
         )
-        .filter(Item.status == "in_stock", Item.is_deleted == False)
+        .filter(
+            Item.status == "in_stock",
+            Item.is_deleted == False,
+            age_expr >= min_days,
+        )
         .all()
     )
 
@@ -286,29 +295,28 @@ def stock_aging(
 
     for item in items:
         age = _item_age(item, today)
-        if age >= min_days:
-            # 使用 allocated_cost 如果存在，否则用 cost_price
-            cost_value = item.allocated_cost if item.allocated_cost is not None else item.cost_price
-            if cost_value is not None:
-                total_value += cost_value
+        # 使用 allocated_cost 如果存在，否则用 cost_price
+        cost_value = item.allocated_cost if item.allocated_cost is not None else item.cost_price
+        if cost_value is not None:
+            total_value += cost_value
 
-            aging_items.append(
-                StockAgingItem(
-                    item_id=item.id,
-                    sku_code=item.sku_code,
-                    name=item.name,
-                    batch_code=item.batch_code,
-                    material_name=item.material.name,
-                    type_name=item.type.name if item.type else None,
-                    cost_price=item.cost_price,
-                    allocated_cost=item.allocated_cost,
-                    selling_price=item.selling_price,
-                    purchase_date=item.purchase_date,
-                    age_days=age,
-                    cover_image=_cover_filename(item),
-                    counter=item.counter,
-                )
+        aging_items.append(
+            StockAgingItem(
+                item_id=item.id,
+                sku_code=item.sku_code,
+                name=item.name,
+                batch_code=item.batch_code,
+                material_name=item.material.name,
+                type_name=item.type.name if item.type else None,
+                cost_price=item.cost_price,
+                allocated_cost=item.allocated_cost,
+                selling_price=item.selling_price,
+                purchase_date=item.purchase_date,
+                age_days=age,
+                cover_image=_cover_filename(item),
+                counter=item.counter,
             )
+        )
 
     # 按库龄降序，最久压货排最前
     aging_items.sort(key=lambda x: x.age_days, reverse=True)
