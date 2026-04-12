@@ -22,6 +22,8 @@ from routers.customers import router as customers_router
 from routers.suppliers import router as suppliers_router
 from routers.dashboard import router as dashboard_router
 from routers.metal_prices import router as metal_prices_router
+from routers.export import router as export_router
+from config import IMAGE_DIR
 
 
 @asynccontextmanager
@@ -109,6 +111,7 @@ app.include_router(customers_router,  prefix=_API_PREFIX)
 app.include_router(suppliers_router,   prefix=_API_PREFIX)
 app.include_router(dashboard_router,    prefix=_API_PREFIX)
 app.include_router(metal_prices_router,  prefix=_API_PREFIX)
+app.include_router(export_router,       prefix=_API_PREFIX)
 
 
 # ── 健康检查 ──
@@ -119,5 +122,9 @@ def health():
 
 # ── 前端静态文件服务 ──
 app.mount("/", StaticFiles(directory="static", html=True), name="frontend")
+
+# ── 图片静态文件服务 ──
+IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/data/images", StaticFiles(directory=str(IMAGE_DIR)), name="images")
 
 

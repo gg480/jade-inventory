@@ -7,12 +7,14 @@ const profitByCategory = ref([])
 const profitByChannel = ref([])
 const salesTrend = ref([])
 const stockAging = ref([])
+const batchProfit = ref([])
 const loading = ref({
   summary: false,
   category: false,
   channel: false,
   trend: false,
-  aging: false
+  aging: false,
+  batch: false
 })
 
 const filters = ref({
@@ -76,6 +78,18 @@ async function fetchSalesTrend() {
   }
 }
 
+// 获取批次回本看板
+async function fetchBatchProfit() {
+  loading.value.batch = true
+  try {
+    batchProfit.value = await api.dashboard.getBatchProfit({}) || []
+  } catch (error) {
+    console.error('获取批次回本看板失败:', error)
+  } finally {
+    loading.value.batch = false
+  }
+}
+
 // 获取压货预警
 async function fetchStockAging() {
   loading.value.aging = true
@@ -103,6 +117,7 @@ function refreshAll() {
   fetchProfitByChannel()
   fetchSalesTrend()
   fetchStockAging()
+  fetchBatchProfit()
 }
 
 // 计算品类利润最大值（用于图表）
@@ -125,6 +140,36 @@ function channelName(channel) {
     ecommerce: '电商'
   }
   return map[channel] || channel
+}
+
+// 批次状态
+function batchStatusText(s) {
+  const map = { new: '未开始', selling: '销售中', paid_back: '已回本', cleared: '清仓完毕' }
+  return map[s] || s
+}
+function batchStatusClass(s) {
+  const map = { new: 'bg-gray-100 text-gray-700', selling: 'bg-blue-100 text-blue-800', paid_back: 'bg-green-100 text-green-800', cleared: 'bg-green-100 text-green-800' }
+  return map[s] || 'bg-gray-100 text-gray-700'
+}
+
+// 导出Excel
+function _downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = filename; a.click()
+  URL.revokeObjectURL(url)
+}
+async function handleExportSales() {
+  try {
+    const resp = await api.exportData.sales({ start_date: filters.value.start_date || undefined, end_date: filters.value.end_date || undefined })
+    _downloadBlob(resp, `销售导出_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.xlsx`)
+  } catch (e) { console.error('导出失败:', e) }
+}
+async function handleExportBatches() {
+  try {
+    const resp = await api.exportData.batches({})
+    _downloadBlob(resp, `批次回本_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.xlsx`)
+  } catch (e) { console.error('导出失败:', e) }
 }
 
 onMounted(() => {
@@ -153,6 +198,12 @@ onMounted(() => {
         </div>
         <button @click="refreshAll" class="btn btn-primary">
           刷新数据
+        </button>
+        <button @click="handleExportSales" class="btn btn-secondary ml-2" title="导出销售Excel">
+          导出销售
+        </button>
+        <button @click="handleExportBatches" class="btn btn-secondary ml-2" title="导出批次回本Excel">
+          导出批次
         </button>
       </div>
     </div>
@@ -296,6 +347,64 @@ onMounted(() => {
             </div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- 批次回本看板 -->
+    <div class="card mb-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold text-gray-900">批次回本看板</h2>
+      </div>
+      <div v-if="loading.batch" class="text-center py-8">
+        <div class="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
+      </div>
+      <div v-else-if="batchProfit.length === 0" class="text-center py-8 text-gray-500">
+        暂无批次数据
+      </div>
+      <div v-else class="table-container">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>批次编号</th>
+              <th>材质</th>
+              <th class="text-right">总成本</th>
+              <th class="text-right">已售/总数</th>
+              <th class="text-right">已回款</th>
+              <th class="text-right">利润</th>
+              <th class="text-right">回本进度</th>
+              <th>状态</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="bp in batchProfit" :key="bp.batch_code" class="hover:bg-gray-50">
+              <td class="font-mono text-sm">{{ bp.batch_code }}</td>
+              <td>{{ bp.material_name }}</td>
+              <td class="text-right">¥{{ bp.total_cost.toFixed(2) }}</td>
+              <td class="text-right">{{ bp.sold_count }}/{{ bp.quantity }}</td>
+              <td class="text-right font-medium">¥{{ bp.revenue.toFixed(2) }}</td>
+              <td class="text-right" :class="bp.profit >= 0 ? 'text-green-600' : 'text-red-600'">
+                ¥{{ bp.profit.toFixed(2) }}
+              </td>
+              <td class="text-right">
+                <div class="flex items-center justify-end space-x-2">
+                  <div class="w-20 bg-gray-200 rounded-full h-2">
+                    <div
+                      class="h-full rounded-full"
+                      :class="bp.payback_rate >= 1 ? 'bg-green-500' : 'bg-blue-500'"
+                      :style="{ width: `${Math.min(bp.payback_rate * 100, 100)}%` }"
+                    ></div>
+                  </div>
+                  <span class="text-xs font-medium w-12 text-right">{{ (bp.payback_rate * 100).toFixed(1) }}%</span>
+                </div>
+              </td>
+              <td>
+                <span :class="batchStatusClass(bp.status)" class="px-2 py-1 text-xs rounded-full font-medium">
+                  {{ batchStatusText(bp.status) }}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </div>
 

@@ -175,13 +175,17 @@ const customers = {
 const suppliers = {
   // 供应商列表
   getSuppliers: (params) => api.get('/suppliers/', { params }),
+  // 新增供应商
+  createSupplier: (data) => api.post('/suppliers/', data),
+  // 编辑供应商
+  updateSupplier: (id, data) => api.put(`/suppliers/${id}`, data),
 }
 
 const dashboard = {
   // 概览数据
   getDashboardSummary: (params) => api.get('/dashboard/summary', { params }),
   // 批次利润分析
-  getBatchProfit: (params) => api.get('/dashboard/profit/by-batch', { params }),
+  getBatchProfit: (params) => api.get('/dashboard/batch-profit', { params }),
   // 按品类利润
   getProfitByCategory: (params) => api.get('/dashboard/profit/by-category', { params }),
   // 按渠道利润
@@ -193,6 +197,15 @@ const dashboard = {
   // 兼容别名
   getSummary: (params) => api.get('/dashboard/summary', { params }),
   getSalesTrend: (params) => api.get('/dashboard/trend', { params }),
+}
+
+const exportData = {
+  // 导出库存
+  inventory: (params) => api.get('/export/inventory', { params, responseType: 'blob' }),
+  // 导出销售
+  sales: (params) => api.get('/export/sales', { params, responseType: 'blob' }),
+  // 导出批次回本
+  batches: (params) => api.get('/export/batches', { params, responseType: 'blob' }),
 }
 
 const metal = {
@@ -211,6 +224,9 @@ const metal = {
   updateMetalPrice: (data) => api.post('/metal-prices', data), // 旧版本，不推荐
 }
 
+// 图片URL前缀
+export const IMAGE_BASE_URL = '/data/images'
+
 export default {
   dicts,
   batches,
@@ -220,6 +236,8 @@ export default {
   suppliers,
   dashboard,
   metal,
+  exportData,
+  IMAGE_BASE_URL,
   // 原始axios实例（特殊情况使用）
   instance: api,
 }
