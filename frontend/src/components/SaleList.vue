@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import api from '../api'
+import Pagination from './Pagination.vue'
 
 // 数据
 const sales = ref([])
@@ -60,6 +61,12 @@ async function fetchSales() {
   } finally {
     loading.value = false
   }
+}
+
+// 分页变化
+function onPageChange(newPage) {
+  pagination.value.page = newPage
+  fetchSales()
 }
 
 // 搜索
@@ -236,32 +243,13 @@ onMounted(() => {
       </div>
 
       <!-- 分页 -->
-      <div class="flex items-center justify-between mt-6">
-        <div class="text-sm text-gray-700">
-          显示第 {{ (pagination.page - 1) * pagination.size + 1 }} 到
-          {{ Math.min(pagination.page * pagination.size, pagination.total) }} 条，
-          共 {{ pagination.total }} 条记录
-        </div>
-        <div class="flex space-x-2">
-          <button
-            @click="pagination.page--; fetchSales()"
-            :disabled="pagination.page <= 1"
-            class="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            上一页
-          </button>
-          <span class="px-3 py-1 text-sm">
-            第 {{ pagination.page }} / {{ pagination.pages }} 页
-          </span>
-          <button
-            @click="pagination.page++; fetchSales()"
-            :disabled="pagination.page >= pagination.pages"
-            class="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            下一页
-          </button>
-        </div>
-      </div>
+      <Pagination
+        :total="pagination.total"
+        :page="pagination.page"
+        :size="pagination.size"
+        @update:page="onPageChange"
+        class="mt-6"
+      />
     </div>
   </div>
 </template>

@@ -4,6 +4,7 @@ import api from '../api'
 import MaterialModal from '../components/MaterialModal.vue'
 import TypeModal from '../components/TypeModal.vue'
 import TagModal from '../components/TagModal.vue'
+import toast from '../composables/useToast'
 
 const activeTab = ref('materials') // materials, types, tags, config
 const loading = ref(false)
@@ -66,7 +67,7 @@ async function fetchDicts() {
     }
   } catch (error) {
     console.error('获取字典数据失败:', error)
-    alert('获取数据失败')
+    toast.error('获取数据失败')
   } finally {
     loading.value = false
   }
@@ -95,10 +96,10 @@ async function handleMaterialSubmit(formData) {
   try {
     if (modalMode.value === 'add') {
       await api.dicts.createMaterial(formData)
-      alert('添加成功')
+      toast.success('添加成功')
     } else {
       await api.dicts.updateMaterial(editingMaterial.value.id, formData)
-      alert('编辑成功')
+      toast.success('编辑成功')
     }
     showMaterialModal.value = false
     fetchDicts()
@@ -123,7 +124,7 @@ async function toggleMaterialStatus(material) {
       // 启用：更新 is_active 为 true
       await api.dicts.updateMaterial(material.id, { is_active: true })
     }
-    alert(`${action}成功`)
+    toast.success(`${action}成功`)
     fetchDicts()
   } catch (error) {
     console.error(`${action}材质失败:`, error)
@@ -150,10 +151,10 @@ async function handleTypeSubmit(formData) {
   try {
     if (typeModalMode.value === 'add') {
       await api.dicts.createType(formData)
-      alert('添加成功')
+      toast.success('添加成功')
     } else {
       await api.dicts.updateType(editingType.value.id, formData)
-      alert('编辑成功')
+      toast.success('编辑成功')
     }
     showTypeModal.value = false
     fetchDicts()
@@ -178,7 +179,7 @@ async function toggleTypeStatus(type) {
       // 启用：更新 is_active 为 true
       await api.dicts.updateType(type.id, { is_active: true })
     }
-    alert(`${action}成功`)
+    toast.success(`${action}成功`)
     fetchDicts()
   } catch (error) {
     console.error(`${action}器型失败:`, error)
@@ -267,10 +268,10 @@ async function handleTagSubmit(formData) {
   try {
     if (tagModalMode.value === 'add') {
       await api.dicts.createTag(formData)
-      alert('添加成功')
+      toast.success('添加成功')
     } else {
       await api.dicts.updateTag(editingTag.value.id, formData)
-      alert('编辑成功')
+      toast.success('编辑成功')
     }
     showTagModal.value = false
     fetchDicts()
@@ -295,7 +296,7 @@ async function toggleTagStatus(tag) {
       // 启用：更新 is_active 为 true
       await api.dicts.updateTag(tag.id, { is_active: true })
     }
-    alert(`${action}成功`)
+    toast.success(`${action}成功`)
     fetchDicts()
   } catch (error) {
     console.error(`${action}标签失败:`, error)
@@ -317,7 +318,7 @@ async function fetchConfig() {
     }
   } catch (error) {
     console.error('获取系统配置失败:', error)
-    alert('获取系统配置失败')
+    toast.error('获取系统配置失败')
   } finally {
     configLoading.value = false
   }
@@ -341,7 +342,7 @@ async function saveConfig() {
   configSaving.value = true
   try {
     await api.dicts.updateConfig(editingConfigKey.value, editingConfigValue.value)
-    alert('保存成功')
+    toast.success('保存成功')
     editingConfigKey.value = null
     editingConfigValue.value = ''
     await fetchConfig()

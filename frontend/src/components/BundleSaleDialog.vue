@@ -1,6 +1,7 @@
 <script setup>
 import { ref, reactive, onMounted, watch, computed } from 'vue'
 import api from '../api'
+import toast from '../composables/useToast'
 
 const props = defineProps({
   items: {
@@ -131,19 +132,19 @@ const mainItemCount = computed(() => {
 // 提交表单
 async function submitForm() {
   if (!form.total_price || parseFloat(form.total_price) <= 0) {
-    alert('请填写有效的套装总价')
+    toast.warning('请填写有效的套装总价')
     return
   }
 
   if (props.items.length === 0) {
-    alert('请选择至少一件货品')
+    toast.warning('请选择至少一件货品')
     return
   }
 
   // chain_at_cost 校验：至少要有1件主件
   if (form.alloc_method === 'chain_at_cost') {
     if (mainItemCount.value === 0) {
-      alert('至少需要保留1件主件（不能全部标记为链子）')
+      toast.warning('至少需要保留1件主件（不能全部标记为链子）')
       return
     }
   }

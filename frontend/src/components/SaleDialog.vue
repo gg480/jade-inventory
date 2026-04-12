@@ -1,6 +1,7 @@
 <script setup>
 import { ref, reactive, onMounted, watch, computed } from 'vue'
 import api from '../api'
+import toast from '../composables/useToast'
 
 const props = defineProps({
   item: {
@@ -78,7 +79,7 @@ async function loadCustomers() {
 // 提交表单
 async function submitForm() {
   if (!form.actual_price || parseFloat(form.actual_price) <= 0) {
-    alert('请填写有效的成交价')
+    toast.warning('请填写有效的成交价')
     return
   }
 

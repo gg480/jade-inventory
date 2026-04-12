@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api, { IMAGE_BASE_URL } from '../api'
+import toast from '../composables/useToast'
 import SaleDialog from '../components/SaleDialog.vue'
 
 const route = useRoute()
@@ -69,7 +70,7 @@ async function fetchItem() {
     }
   } catch (error) {
     console.error('获取货品详情失败:', error)
-    alert('货品不存在或已删除')
+    toast.error('货品不存在或已删除')
     router.push('/inventory')
   } finally {
     loading.value = false
@@ -82,10 +83,10 @@ async function deleteItem() {
 
   try {
     await api.items.deleteItem(route.params.id)
-    alert('删除成功')
+    toast.success('删除成功')
     router.push('/inventory')
   } catch (error) {
-    alert(`删除失败: ${error.message}`)
+    toast.error(`删除失败: ${error.message}`)
   }
 }
 
@@ -94,10 +95,10 @@ async function markAsLent() {
   if (!confirm('标记为借出？')) return
   try {
     await api.items.updateItem(route.params.id, { status: 'lent_out' })
-    alert('已标记为借出')
+    toast.success('已标记为借出')
     fetchItem()
   } catch (error) {
-    alert(`操作失败: ${error.message}`)
+    toast.error(`操作失败: ${error.message}`)
   }
 }
 
@@ -106,10 +107,10 @@ async function markAsReturned() {
   if (!confirm('标记为已退？')) return
   try {
     await api.items.updateItem(route.params.id, { status: 'returned' })
-    alert('已标记为已退')
+    toast.success('已标记为已退')
     fetchItem()
   } catch (error) {
-    alert(`操作失败: ${error.message}`)
+    toast.error(`操作失败: ${error.message}`)
   }
 }
 
@@ -125,7 +126,7 @@ function openCheckoutModal() {
 
 // 处理出库成功
 function handleSaleSuccess() {
-  alert('出库成功！')
+  toast.success('出库成功！')
   fetchItem() // 刷新详情
 }
 

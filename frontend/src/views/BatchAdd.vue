@@ -417,6 +417,7 @@ import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDictStore } from '../store/dict'
 import api from '../api'
+import toast from '../composables/useToast'
 
 const router = useRouter()
 const dictStore = useDictStore()
@@ -550,7 +551,7 @@ async function loadSelectData() {
     }
   } catch (error) {
     console.error('加载下拉数据失败:', error)
-    alert('加载数据失败，请刷新页面重试')
+    toast.error('加载数据失败，请刷新页面重试')
   }
 }
 
@@ -650,7 +651,7 @@ async function submitBatch() {
 
   } catch (error) {
     console.error('创建批次失败:', error)
-    alert(`创建批次失败: ${error.message || '请检查输入数据'}`)
+    toast.error(`创建批次失败: ${error.message || '请检查输入数据'}`)
   } finally {
     submitting.value = false
   }
@@ -701,11 +702,11 @@ async function submitItem() {
     resetItemForm()
 
     // 成功提示（不再询问是否完成，录够后会显示触发分摊按钮）
-    alert(`货品添加成功！已录入 ${itemsAdded.value}/${form.quantity} 件。`)
+    toast.success(`货品添加成功！已录入 ${itemsAdded.value}/${form.quantity} 件。`)
 
   } catch (error) {
     console.error('添加货品失败:', error)
-    alert(`添加货品失败: ${error.message || '请检查输入数据'}`)
+    toast.error(`添加货品失败: ${error.message || '请检查输入数据'}`)
   } finally {
     submittingItem.value = false
   }
@@ -742,7 +743,7 @@ async function triggerAllocation() {
 
   } catch (error) {
     console.error('触发成本分摊失败:', error)
-    alert(`成本分摊失败: ${error.message || '请稍后重试'}`)
+    toast.error(`成本分摊失败: ${error.message || '请稍后重试'}`)
   } finally {
     allocating.value = false
   }

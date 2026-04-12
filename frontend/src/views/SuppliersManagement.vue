@@ -154,6 +154,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/api'
+import toast from '../composables/useToast'
 
 const suppliers = ref([])
 const loading = ref(false)
@@ -212,7 +213,7 @@ function closeModal() {
 
 async function handleSubmit() {
   if (!form.value.name.trim()) {
-    alert('请输入供应商名称')
+    toast.warning('请输入供应商名称')
     return
   }
   submitting.value = true

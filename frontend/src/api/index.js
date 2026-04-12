@@ -1,4 +1,5 @@
 import axios from 'axios'
+import toast from '../composables/useToast'
 
 // 创建axios实例
 const api = axios.create({
@@ -43,7 +44,7 @@ api.interceptors.response.use(
       } else {
         // 业务错误，弹出提示
         const errorMessage = message || '请求失败'
-        alert(`错误 ${code}: ${errorMessage}`)
+        toast.error(`${errorMessage}`)
         const error = new Error(errorMessage)
         error.code = code
         return Promise.reject(error)
@@ -85,7 +86,7 @@ api.interceptors.response.use(
     }
 
     // 弹出错误提示
-    alert(message)
+    toast.error(message)
 
     error.message = message
     return Promise.reject(error)

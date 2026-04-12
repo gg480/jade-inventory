@@ -2,7 +2,9 @@
 import { ref, onMounted, watch, computed, onBeforeUnmount } from 'vue'
 import api from '../api'
 import Pagination from '../components/Pagination.vue'
+import toast from '../composables/useToast'
 import BundleSaleDialog from '../components/BundleSaleDialog.vue'
+import SaleDialog from '../components/SaleDialog.vue'
 
 const items = ref([])
 const loading = ref(false)
@@ -57,17 +59,9 @@ const selectedItemsData = computed(() => {
   return items.value.filter(item => selectedItems.value.has(item.id))
 })
 
-// 出库相关
-const showCheckoutModal = ref(false)
-const checkoutItem = ref(null)
-const checkoutForm = ref({
-  actual_price: '',
-  channel: 'store',
-  sale_date: new Date().toISOString().slice(0, 10),
-  customer_note: ''
-})
-const checkoutError = ref('')
-const checkoutLoading = ref(false)
+// 出库弹窗相关
+const showSaleDialog = ref(false)
+const saleItem = ref(null)
 
 // 套装出库相关
 const showBundleSaleDialog = ref(false)
@@ -170,49 +164,17 @@ function toggleSelectAll() {
   }
 }
 
-// 打开出库模态框
-function openCheckoutModal(item) {
-  checkoutItem.value = item
-  checkoutForm.value = {
-    actual_price: item.selling_price,
-    channel: 'store',
-    sale_date: new Date().toISOString().slice(0, 10),
-    customer_note: ''
-  }
-  checkoutError.value = ''
-  checkoutLoading.value = false
-  showCheckoutModal.value = true
+// 打开出库弹窗
+function openSaleDialog(item) {
+  saleItem.value = item
+  showSaleDialog.value = true
 }
 
-// 提交出库
-async function submitCheckout() {
-  if (!checkoutForm.value.actual_price || parseFloat(checkoutForm.value.actual_price) <= 0) {
-    alert('请填写有效的成交价')
-    return
-  }
-
-  checkoutError.value = ''
-  checkoutLoading.value = true
-
-  try {
-    const saleData = {
-      item_id: checkoutItem.value.id,
-      actual_price: parseFloat(checkoutForm.value.actual_price),
-      channel: checkoutForm.value.channel,
-      sale_date: checkoutForm.value.sale_date,
-      customer_note: checkoutForm.value.customer_note
-    }
-
-    await api.sales.createSale(saleData)
-    alert('出库成功！')
-    showCheckoutModal.value = false
-    fetchItems() // 刷新列表
-  } catch (error) {
-    // 错误信息已由API拦截器展示，这里可以设置具体错误状态
-    checkoutError.value = error.message
-  } finally {
-    checkoutLoading.value = false
-  }
+// 出库成功回调
+function handleSaleSuccess() {
+  toast.success('出库成功！')
+  showSaleDialog.value = false
+  fetchItems()
 }
 
 // 删除货品
@@ -221,10 +183,10 @@ async function deleteItem(itemId, itemName) {
 
   try {
     await api.items.deleteItem(itemId)
-    alert('删除成功')
+    toast.success('删除成功')
     fetchItems() // 刷新列表
   } catch (error) {
-    alert(`删除失败: ${error.message}`)
+    toast.error(`删除失败: ${error.message}`)
   }
 }
 
@@ -234,17 +196,17 @@ async function markAsLent(itemId, itemName) {
 
   try {
     await api.items.updateItem(itemId, { status: 'lent_out' })
-    alert('已标记为借出')
+    toast.success('已标记为借出')
     fetchItems() // 刷新列表
   } catch (error) {
-    alert(`操作失败: ${error.message}`)
+    toast.error(`操作失败: ${error.message}`)
   }
 }
 
 // 批量删除
 async function batchDelete() {
   if (selectedItems.value.size === 0) {
-    alert('请先选择要删除的货品')
+    toast.warning('请先选择要删除的货品')
     return
   }
 
@@ -253,24 +215,24 @@ async function batchDelete() {
   try {
     const promises = Array.from(selectedItems.value).map(id => api.items.deleteItem(id))
     await Promise.all(promises)
-    alert('批量删除成功')
+    toast.success('批量删除成功')
     fetchItems() // 刷新列表
   } catch (error) {
-    alert(`批量删除失败: ${error.message}`)
+    toast.error(`批量删除失败: ${error.message}`)
   }
 }
 
 // 打开套装出库对话框
 function openBundleSaleDialog() {
   if (selectedItems.value.size < 2) {
-    alert('请至少选择2件货品进行套装出库')
+    toast.warning('请至少选择2件货品进行套装出库')
     return
   }
 
   // 检查所有选中货品是否都在库
   const notInStockItems = selectedItemsData.value.filter(item => item.status !== 'in_stock')
   if (notInStockItems.length > 0) {
-    alert(`以下货品不在库，无法出库：${notInStockItems.map(item => item.sku_code).join(', ')}`)
+    toast.warning(`以下货品不在库，无法出库：${notInStockItems.map(item => item.sku_code).join(', ')}`)
     return
   }
 
@@ -279,7 +241,7 @@ function openBundleSaleDialog() {
 
 // 处理套装出库成功
 function handleBundleSaleSuccess() {
-  alert('套装出库成功！')
+  toast.success('套装出库成功！')
   fetchItems() // 刷新列表
   showBundleSaleDialog.value = false
 }
@@ -287,7 +249,7 @@ function handleBundleSaleSuccess() {
 // 批量借出
 async function batchLendOut() {
   if (selectedItems.value.size === 0) {
-    alert('请先选择要借出的货品')
+    toast.warning('请先选择要借出的货品')
     return
   }
 
@@ -298,10 +260,10 @@ async function batchLendOut() {
       api.items.updateItem(id, { status: 'lent_out' })
     )
     await Promise.all(promises)
-    alert('批量借出成功')
+    toast.success('批量借出成功')
     fetchItems() // 刷新列表
   } catch (error) {
-    alert(`批量借出失败: ${error.message}`)
+    toast.error(`批量借出失败: ${error.message}`)
   }
 }
 
@@ -657,7 +619,7 @@ onMounted(() => {
                   </router-link>
                   <button
                     v-if="item.status === 'in_stock'"
-                    @click="openCheckoutModal(item)"
+                    @click="openSaleDialog(item)"
                     class="text-jade-600 hover:text-jade-800 text-sm font-medium"
                     title="销售出库"
                   >
@@ -736,100 +698,14 @@ onMounted(() => {
       />
     </div>
 
-    <!-- 出库模态框 -->
-    <div v-if="showCheckoutModal" class="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center p-4 z-50">
-      <div class="bg-white rounded-lg shadow-xl max-w-md w-full">
-        <div class="px-6 py-4 border-b border-gray-200">
-          <h3 class="text-lg font-semibold text-gray-900">销售出库</h3>
-          <p class="mt-1 text-sm text-gray-600">{{ checkoutItem?.sku_code }} - {{ checkoutItem?.material_name }}</p>
-        </div>
-        <div class="px-6 py-4">
-          <form @submit.prevent="submitCheckout">
-            <!-- 错误提示 -->
-            <div v-if="checkoutError" class="mb-4 p-3 bg-red-50 border border-red-200 rounded">
-              <div class="flex items-start">
-                <div class="flex-shrink-0">
-                  <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                  </svg>
-                </div>
-                <div class="ml-3">
-                  <p class="text-sm text-red-700">{{ checkoutError }}</p>
-                </div>
-              </div>
-            </div>
-            <div class="space-y-4">
-              <!-- 成交价 -->
-              <div>
-                <label class="form-label">成交价（¥） <span class="text-red-500">*</span></label>
-                <input
-                  v-model="checkoutForm.actual_price"
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  required
-                  class="form-input"
-                  placeholder="0.00"
-                />
-                <p class="mt-1 text-xs text-gray-500">
-                  标价：¥{{ checkoutItem?.selling_price.toFixed(2) }}，
-                  进价：¥{{ checkoutItem?.cost_price.toFixed(2) }}
-                </p>
-              </div>
-
-              <!-- 销售渠道 -->
-              <div>
-                <label class="form-label">销售渠道</label>
-                <select v-model="checkoutForm.channel" class="form-input">
-                  <option value="store">门店</option>
-                  <option value="wechat">微信</option>
-                  <option value="ecommerce">电商</option>
-                </select>
-              </div>
-
-              <!-- 成交日期 -->
-              <div>
-                <label class="form-label">成交日期</label>
-                <input
-                  v-model="checkoutForm.sale_date"
-                  type="date"
-                  class="form-input"
-                />
-              </div>
-
-              <!-- 客户/交易备注 -->
-              <div>
-                <label class="form-label">客户/交易备注（可选）</label>
-                <textarea
-                  v-model="checkoutForm.customer_note"
-                  rows="2"
-                  class="form-input"
-                  placeholder="可填写客户信息、交易备注等"
-                ></textarea>
-              </div>
-            </div>
-
-            <div class="mt-6 flex justify-end space-x-3">
-              <button
-                type="button"
-                @click="showCheckoutModal = false"
-                class="btn btn-secondary"
-              >
-                取消
-              </button>
-              <button
-                type="submit"
-                class="btn btn-success"
-                :disabled="checkoutLoading"
-              >
-                <span v-if="checkoutLoading" class="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></span>
-                {{ checkoutLoading ? '处理中...' : '确认出库' }}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
+    <!-- 单件出库弹窗 -->
+    <SaleDialog
+      v-if="saleItem"
+      :item="saleItem"
+      :visible="showSaleDialog"
+      @close="showSaleDialog = false"
+      @success="handleSaleSuccess"
+    />
 
     <!-- 套装出库弹窗组件 -->
     <BundleSaleDialog

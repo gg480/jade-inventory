@@ -1,6 +1,8 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, watch, nextTick, onBeforeUnmount } from 'vue'
+import * as echarts from 'echarts'
 import api from '../api'
+import toast from '../composables/useToast'
 
 const summary = ref(null)
 const profitByCategory = ref([])
@@ -24,13 +26,21 @@ const filters = ref({
   min_days: 90
 })
 
+// ECharts 实例
+const categoryChartRef = ref(null)
+const channelChartRef = ref(null)
+const trendChartRef = ref(null)
+let categoryChart = null
+let channelChart = null
+let trendChart = null
+
 // 获取概览数据
 async function fetchSummary() {
   loading.value.summary = true
   try {
     summary.value = await api.dashboard.getSummary({ aging_days: filters.value.min_days })
   } catch (error) {
-    console.error('获取概览数据失败:', error)
+    // 静默处理
   } finally {
     loading.value.summary = false
   }
@@ -44,8 +54,10 @@ async function fetchProfitByCategory() {
     if (filters.value.start_date) params.start_date = filters.value.start_date
     if (filters.value.end_date) params.end_date = filters.value.end_date
     profitByCategory.value = await api.dashboard.getProfitByCategory(params)
+    await nextTick()
+    renderCategoryChart()
   } catch (error) {
-    console.error('获取品类利润失败:', error)
+    // 静默处理
   } finally {
     loading.value.category = false
   }
@@ -59,8 +71,10 @@ async function fetchProfitByChannel() {
     if (filters.value.start_date) params.start_date = filters.value.start_date
     if (filters.value.end_date) params.end_date = filters.value.end_date
     profitByChannel.value = await api.dashboard.getProfitByChannel(params)
+    await nextTick()
+    renderChannelChart()
   } catch (error) {
-    console.error('获取渠道利润失败:', error)
+    // 静默处理
   } finally {
     loading.value.channel = false
   }
@@ -71,8 +85,10 @@ async function fetchSalesTrend() {
   loading.value.trend = true
   try {
     salesTrend.value = await api.dashboard.getSalesTrend({ months: filters.value.months })
+    await nextTick()
+    renderTrendChart()
   } catch (error) {
-    console.error('获取销售趋势失败:', error)
+    // 静默处理
   } finally {
     loading.value.trend = false
   }
@@ -84,7 +100,7 @@ async function fetchBatchProfit() {
   try {
     batchProfit.value = await api.dashboard.getBatchProfit({}) || []
   } catch (error) {
-    console.error('获取批次回本看板失败:', error)
+    // 静默处理
   } finally {
     loading.value.batch = false
   }
@@ -95,7 +111,6 @@ async function fetchStockAging() {
   loading.value.aging = true
   try {
     const response = await api.dashboard.getStockAging({ min_days: filters.value.min_days })
-    // API 返回 { items: [...], total_items, total_value }
     if (response && Array.isArray(response.items)) {
       stockAging.value = response.items
     } else if (Array.isArray(response)) {
@@ -104,7 +119,7 @@ async function fetchStockAging() {
       stockAging.value = []
     }
   } catch (error) {
-    console.error('获取压货预警失败:', error)
+    // 静默处理
   } finally {
     loading.value.aging = false
   }
@@ -120,26 +135,247 @@ function refreshAll() {
   fetchBatchProfit()
 }
 
-// 计算品类利润最大值（用于图表）
-const categoryMaxProfit = computed(() => {
-  if (profitByCategory.value.length === 0) return 0
-  return Math.max(...profitByCategory.value.map(item => item.profit))
-})
+// ===================== ECharts 图表 =====================
 
-// 计算渠道利润最大值
-const channelMaxProfit = computed(() => {
-  if (profitByChannel.value.length === 0) return 0
-  return Math.max(...profitByChannel.value.map(item => item.profit))
-})
+// 玉器配色方案
+const chartColors = ['#059669', '#2563eb', '#9333ea', '#d97706', '#dc2626', '#0891b2', '#4f46e5', '#c026d3', '#65a30d', '#ea580c']
 
-// 渠道显示名称
-function channelName(channel) {
-  const map = {
-    store: '门店',
-    wechat: '微信',
-    ecommerce: '电商'
+function initCharts() {
+  if (categoryChartRef.value) {
+    categoryChart = echarts.init(categoryChartRef.value)
   }
-  return map[channel] || channel
+  if (channelChartRef.value) {
+    channelChart = echarts.init(channelChartRef.value)
+  }
+  if (trendChartRef.value) {
+    trendChart = echarts.init(trendChartRef.value)
+  }
+}
+
+// 品类利润柱状图
+function renderCategoryChart() {
+  if (!categoryChart) return
+  const data = profitByCategory.value
+  if (!data || data.length === 0) {
+    categoryChart.clear()
+    return
+  }
+
+  const sortedData = [...data].sort((a, b) => b.profit - a.profit)
+  const names = sortedData.map(d => d.material_name)
+  const profits = sortedData.map(d => d.profit)
+  const revenues = sortedData.map(d => d.revenue)
+  const costs = sortedData.map(d => d.cost)
+  const margins = sortedData.map(d => (d.profit_margin * 100).toFixed(1))
+
+  categoryChart.setOption({
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter(params) {
+        const idx = params[0].dataIndex
+        const d = sortedData[idx]
+        return `<strong>${d.material_name}</strong><br/>` +
+          `销售额: ¥${d.revenue.toFixed(2)}<br/>` +
+          `成本: ¥${d.cost.toFixed(2)}<br/>` +
+          `毛利: ¥${d.profit.toFixed(2)}<br/>` +
+          `毛利率: ${(d.profit_margin * 100).toFixed(1)}%<br/>` +
+          `件数: ${d.sales_count}`
+      }
+    },
+    grid: { left: 80, right: 40, top: 12, bottom: 20 },
+    xAxis: {
+      type: 'value',
+      axisLabel: { formatter: v => v >= 10000 ? `${(v / 10000).toFixed(1)}万` : v.toFixed(0) }
+    },
+    yAxis: {
+      type: 'category',
+      data: names.reverse(),
+      axisLabel: { width: 70, overflow: 'truncate' }
+    },
+    series: [
+      {
+        name: '利润',
+        type: 'bar',
+        data: profits.reverse(),
+        itemStyle: {
+          color: (params) => chartColors[params.dataIndex % chartColors.length],
+          borderRadius: [0, 4, 4, 0]
+        },
+        label: {
+          show: true,
+          position: 'right',
+          formatter: p => `¥${p.value.toFixed(0)}`,
+          fontSize: 11
+        }
+      }
+    ]
+  }, true)
+}
+
+// 渠道利润饼图
+function renderChannelChart() {
+  if (!channelChart) return
+  const data = profitByChannel.value
+  if (!data || data.length === 0) {
+    channelChart.clear()
+    return
+  }
+
+  const channelLabelMap = { store: '门店', wechat: '微信', ecommerce: '电商' }
+  const pieData = data.map((d, i) => ({
+    name: channelLabelMap[d.channel] || d.channel,
+    value: Math.round(d.revenue * 100) / 100,
+    profit: d.profit,
+    profitMargin: d.profit_margin,
+    salesCount: d.sales_count,
+    itemStyle: { color: chartColors[i % chartColors.length] }
+  }))
+
+  channelChart.setOption({
+    tooltip: {
+      trigger: 'item',
+      formatter(p) {
+        const d = p.data
+        return `<strong>${d.name}</strong><br/>` +
+          `销售额: ¥${d.value.toFixed(2)}<br/>` +
+          `毛利: ¥${d.profit.toFixed(2)}<br/>` +
+          `毛利率: ${(d.profitMargin * 100).toFixed(1)}%<br/>` +
+          `件数: ${d.salesCount}`
+      }
+    },
+    legend: {
+      bottom: 0,
+      itemWidth: 12,
+      itemHeight: 12,
+      textStyle: { fontSize: 13 }
+    },
+    series: [{
+      type: 'pie',
+      radius: ['40%', '70%'],
+      center: ['50%', '42%'],
+      avoidLabelOverlap: true,
+      itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
+      label: {
+        show: true,
+        formatter: '{b}\n¥{c}',
+        fontSize: 12
+      },
+      emphasis: {
+        label: { show: true, fontSize: 14, fontWeight: 'bold' },
+        itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: 'rgba(0,0,0,0.2)' }
+      },
+      data: pieData
+    }]
+  }, true)
+}
+
+// 销售趋势折线图
+function renderTrendChart() {
+  if (!trendChart) return
+  const data = salesTrend.value
+  if (!data || data.length === 0) {
+    trendChart.clear()
+    return
+  }
+
+  const xData = data.map(d => d.year_month)
+  const revenueData = data.map(d => d.revenue)
+  const profitData = data.map(d => d.profit)
+  const countData = data.map(d => d.sales_count)
+
+  trendChart.setOption({
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'cross' },
+      formatter(params) {
+        const date = params[0].axisValue
+        let html = `<strong>${date}</strong><br/>`
+        params.forEach(p => {
+          if (p.seriesName === '销量') {
+            html += `${p.marker} 销量: ${p.value} 件<br/>`
+          } else {
+            html += `${p.marker} ${p.seriesName}: ¥${p.value.toFixed(2)}<br/>`
+          }
+        })
+        return html
+      }
+    },
+    legend: {
+      data: ['销售额', '毛利', '销量'],
+      bottom: 0,
+      itemWidth: 16,
+      itemHeight: 8
+    },
+    grid: { left: 60, right: 60, top: 16, bottom: 36 },
+    xAxis: {
+      type: 'category',
+      data: xData,
+      axisLabel: { fontSize: 11, rotate: xData.length > 12 ? 30 : 0 }
+    },
+    yAxis: [
+      {
+        type: 'value',
+        name: '金额(¥)',
+        axisLabel: { formatter: v => v >= 10000 ? `${(v / 10000).toFixed(1)}万` : v.toFixed(0) }
+      },
+      {
+        type: 'value',
+        name: '件数',
+        splitLine: { show: false },
+        axisLabel: { formatter: v => v.toFixed(0) }
+      }
+    ],
+    series: [
+      {
+        name: '销售额',
+        type: 'line',
+        data: revenueData,
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 6,
+        lineStyle: { width: 2, color: '#2563eb' },
+        itemStyle: { color: '#2563eb' },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(37,99,235,0.15)' },
+            { offset: 1, color: 'rgba(37,99,235,0.01)' }
+          ])
+        }
+      },
+      {
+        name: '毛利',
+        type: 'line',
+        data: profitData,
+        smooth: true,
+        symbol: 'diamond',
+        symbolSize: 6,
+        lineStyle: { width: 2, color: '#059669' },
+        itemStyle: { color: '#059669' },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(5,150,105,0.15)' },
+            { offset: 1, color: 'rgba(5,150,105,0.01)' }
+          ])
+        }
+      },
+      {
+        name: '销量',
+        type: 'bar',
+        yAxisIndex: 1,
+        data: countData,
+        barWidth: 16,
+        itemStyle: { color: 'rgba(147,51,234,0.25)', borderRadius: [3, 3, 0, 0] }
+      }
+    ]
+  }, true)
+}
+
+// 窗口大小变化时自适应
+function handleResize() {
+  categoryChart?.resize()
+  channelChart?.resize()
+  trendChart?.resize()
 }
 
 // 批次状态
@@ -163,17 +399,40 @@ async function handleExportSales() {
   try {
     const resp = await api.exportData.sales({ start_date: filters.value.start_date || undefined, end_date: filters.value.end_date || undefined })
     _downloadBlob(resp, `销售导出_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.xlsx`)
-  } catch (e) { console.error('导出失败:', e) }
+    toast.success('销售数据导出成功')
+  } catch (e) {
+    // 错误已由拦截器处理
+  }
 }
 async function handleExportBatches() {
   try {
     const resp = await api.exportData.batches({})
     _downloadBlob(resp, `批次回本_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.xlsx`)
-  } catch (e) { console.error('导出失败:', e) }
+    toast.success('批次数据导出成功')
+  } catch (e) {
+    // 错误已由拦截器处理
+  }
 }
 
 onMounted(() => {
   refreshAll()
+  nextTick(() => {
+    initCharts()
+    // 数据加载完成后渲染图表
+    setTimeout(() => {
+      renderCategoryChart()
+      renderChannelChart()
+      renderTrendChart()
+    }, 800)
+  })
+  window.addEventListener('resize', handleResize)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleResize)
+  categoryChart?.dispose()
+  channelChart?.dispose()
+  trendChart?.dispose()
 })
 </script>
 
@@ -185,8 +444,8 @@ onMounted(() => {
         <h1 class="text-2xl font-bold text-gray-900">利润看板</h1>
         <p class="mt-1 text-sm text-gray-600">经营数据分析与压货预警</p>
       </div>
-      <div class="mt-4 sm:mt-0 flex space-x-2">
-        <div class="flex items-center space-x-2">
+      <div class="mt-4 sm:mt-0 flex flex-wrap items-center gap-2">
+        <div class="flex items-center space-x-1">
           <label class="text-sm text-gray-600">压货阈值:</label>
           <input
             v-model="filters.min_days"
@@ -199,10 +458,10 @@ onMounted(() => {
         <button @click="refreshAll" class="btn btn-primary">
           刷新数据
         </button>
-        <button @click="handleExportSales" class="btn btn-secondary ml-2" title="导出销售Excel">
+        <button @click="handleExportSales" class="btn btn-secondary" title="导出销售Excel">
           导出销售
         </button>
-        <button @click="handleExportBatches" class="btn btn-secondary ml-2" title="导出批次回本Excel">
+        <button @click="handleExportBatches" class="btn btn-secondary" title="导出批次回本Excel">
           导出批次
         </button>
       </div>
@@ -220,10 +479,19 @@ onMounted(() => {
         <div class="text-2xl font-bold text-jade-600 mt-1">¥{{ summary.month_revenue.toFixed(2) }}</div>
         <div class="text-xs text-gray-500 mt-1">{{ summary.month_sold_count }} 件，毛利 ¥{{ summary.month_profit.toFixed(2) }}</div>
       </div>
-
+      <div class="card text-center">
+        <div class="text-sm text-gray-500">压货预警</div>
+        <div class="text-2xl font-bold text-red-600 mt-1">{{ stockAging.length }}</div>
+        <div class="text-xs text-gray-500 mt-1">超过 {{ filters.min_days }} 天未售出</div>
+      </div>
+      <div class="card text-center">
+        <div class="text-sm text-gray-500">批次回本</div>
+        <div class="text-2xl font-bold text-green-600 mt-1">{{ batchProfit.filter(b => b.status === 'paid_back' || b.status === 'cleared').length }}</div>
+        <div class="text-xs text-gray-500 mt-1">已回本批次</div>
+      </div>
     </div>
 
-    <!-- 按品类利润 -->
+    <!-- 按品类利润 — ECharts 柱状图 -->
     <div class="card mb-6">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-lg font-semibold text-gray-900">按品类利润统计</h2>
@@ -242,33 +510,12 @@ onMounted(() => {
       <div v-else-if="profitByCategory.length === 0" class="text-center py-8 text-gray-500">
         暂无数据
       </div>
-      <div v-else class="space-y-4">
-        <div v-for="item in profitByCategory" :key="item.material_id" class="border border-gray-200 rounded-lg p-4">
-          <div class="flex items-center justify-between mb-2">
-            <div class="font-medium text-gray-900">{{ item.material_name }}</div>
-            <div class="text-lg font-bold text-jade-600">¥{{ item.profit.toFixed(2) }}</div>
-          </div>
-          <div class="flex items-center space-x-4 text-sm text-gray-600">
-            <span>销售额: ¥{{ item.revenue.toFixed(2) }}</span>
-            <span>成本: ¥{{ item.cost.toFixed(2) }}</span>
-            <span>件数: {{ item.sales_count }}</span>
-            <span class="font-medium text-blue-600">毛利率: {{ (item.profit_margin * 100).toFixed(1) }}%</span>
-          </div>
-          <div class="mt-2">
-            <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
-              <div
-                class="h-full bg-jade-500"
-                :style="{ width: `${categoryMaxProfit > 0 ? (item.profit / categoryMaxProfit * 100) : 0}%` }"
-              ></div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <div v-else ref="categoryChartRef" style="width: 100%; height: 300px;"></div>
     </div>
 
-    <!-- 按渠道利润和销售趋势 -->
+    <!-- 按渠道利润和销售趋势 — ECharts 双图 -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-      <!-- 按渠道利润 -->
+      <!-- 按渠道利润 — 饼图 -->
       <div class="card">
         <h2 class="text-lg font-semibold text-gray-900 mb-4">按渠道利润</h2>
         <div v-if="loading.channel" class="text-center py-8">
@@ -277,48 +524,19 @@ onMounted(() => {
         <div v-else-if="profitByChannel.length === 0" class="text-center py-8 text-gray-500">
           暂无数据
         </div>
-        <div v-else class="space-y-4">
-          <div v-for="item in profitByChannel" :key="item.channel" class="border border-gray-200 rounded-lg p-4">
-            <div class="flex items-center justify-between mb-2">
-              <span :class="{
-                'px-2 py-1 text-sm rounded-full': true,
-                'bg-blue-100 text-blue-800': item.channel === 'store',
-                'bg-green-100 text-green-800': item.channel === 'wechat',
-                'bg-purple-100 text-purple-800': item.channel === 'ecommerce'
-              }">
-                {{ channelName(item.channel) }}
-              </span>
-              <div class="text-lg font-bold text-jade-600">¥{{ item.profit.toFixed(2) }}</div>
-            </div>
-            <div class="flex items-center space-x-4 text-sm text-gray-600">
-              <span>销售额: ¥{{ item.revenue.toFixed(2) }}</span>
-              <span>件数: {{ item.sales_count }}</span>
-              <span class="font-medium text-blue-600">毛利率: {{ (item.profit_margin * 100).toFixed(1) }}%</span>
-            </div>
-            <div class="mt-2">
-              <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
-                <div
-                  class="h-full bg-jade-500"
-                  :style="{ width: `${channelMaxProfit > 0 ? (item.profit / channelMaxProfit * 100) : 0}%` }"
-                ></div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <div v-else ref="channelChartRef" style="width: 100%; height: 320px;"></div>
       </div>
 
-      <!-- 销售趋势 -->
+      <!-- 销售趋势 — 折线图 -->
       <div class="card">
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-lg font-semibold text-gray-900">销售趋势</h2>
-          <div class="flex space-x-2">
-            <select v-model="filters.months" @change="fetchSalesTrend" class="text-sm border border-gray-300 rounded px-2 py-1">
-              <option :value="3">最近3个月</option>
-              <option :value="6">最近6个月</option>
-              <option :value="12">最近12个月</option>
-              <option :value="24">最近24个月</option>
-            </select>
-          </div>
+          <select v-model="filters.months" @change="fetchSalesTrend" class="text-sm border border-gray-300 rounded px-2 py-1">
+            <option :value="3">最近3个月</option>
+            <option :value="6">最近6个月</option>
+            <option :value="12">最近12个月</option>
+            <option :value="24">最近24个月</option>
+          </select>
         </div>
         <div v-if="loading.trend" class="text-center py-8">
           <div class="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
@@ -326,18 +544,7 @@ onMounted(() => {
         <div v-else-if="salesTrend.length === 0" class="text-center py-8 text-gray-500">
           暂无数据
         </div>
-        <div v-else class="space-y-3">
-          <div v-for="item in salesTrend" :key="item.year_month" class="border border-gray-200 rounded-lg p-3">
-            <div class="flex items-center justify-between mb-1">
-              <div class="font-medium text-gray-900">{{ item.year_month }}</div>
-              <div class="text-sm font-bold text-jade-600">毛利 ¥{{ item.profit.toFixed(2) }}</div>
-            </div>
-            <div class="flex items-center space-x-4 text-sm text-gray-600">
-              <span>销售额: ¥{{ item.revenue.toFixed(2) }}</span>
-              <span>销量: {{ item.sales_count }}</span>
-            </div>
-          </div>
-        </div>
+        <div v-else ref="trendChartRef" style="width: 100%; height: 320px;"></div>
       </div>
     </div>
 

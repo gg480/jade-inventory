@@ -308,6 +308,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import api from '@/api'
+import toast from '@/composables/useToast'
 
 // 响应式数据
 const currentPrices = ref([])
@@ -480,7 +481,7 @@ async function confirmReprice() {
 
   } catch (error) {
     console.error('批量调价失败:', error)
-    alert('批量调价失败: ' + (error.message || '请重试'))
+    toast.error('批量调价失败: ' + (error.message || '请重试'))
   } finally {
     loading.value.confirm = false
   }

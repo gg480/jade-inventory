@@ -3,6 +3,7 @@ import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../api'
 import { useDictStore } from '../store/dict'
+import toast from '../composables/useToast'
 
 const props = defineProps({
   id: { type: String, default: null }
@@ -114,7 +115,7 @@ async function fetchDicts() {
     return { materialsData, tagsData, suppliersData }
   } catch (error) {
     console.error('获取字典数据失败:', error)
-    alert(`加载字典数据失败: ${error.message}\n请确保后端服务正在运行，然后刷新页面。`)
+    toast.error(`加载字典数据失败: ${error.message}，请确保后端服务正在运行，然后刷新页面。`)
     throw error // 重新抛出错误，让上层处理
   }
 }
@@ -162,7 +163,7 @@ async function loadItem() {
       }
     }
   } catch (error) {
-    alert(`加载货品失败: ${error.message}`)
+    toast.error(`加载货品失败: ${error.message}`)
     router.push('/inventory')
   } finally {
     loadingItem.value = false
@@ -280,11 +281,11 @@ async function submitSingle() {
 
     if (isEditMode.value) {
       await api.items.updateItem(props.id, formData)
-      alert('编辑成功！')
+      toast.success('编辑成功！')
       router.push('/inventory')
     } else {
       await api.items.createItem(formData)
-      alert('入库成功！')
+      toast.success('入库成功！')
 
       // 询问用户下一步操作
       const continueAdd = confirm('入库成功！\n\n点击"确定"继续入库，点击"取消"查看库存列表。')
@@ -327,7 +328,7 @@ async function submitSingle() {
       }
     }
   } catch (error) {
-    alert(`${isEditMode.value ? '编辑' : '入库'}失败: ${error.message}`)
+    toast.error(`${isEditMode.value ? '编辑' : '入库'}失败: ${error.message}`)
   } finally {
     loading.value = false
   }
@@ -353,10 +354,10 @@ async function submitBatch() {
     }
 
     await api.items.createItemsBatch(formData)
-    alert(`批量入库成功！已创建 ${batchForm.quantity} 件货品`)
+    toast.success(`批量入库成功！已创建 ${batchForm.quantity} 件货品`)
     router.push('/inventory')
   } catch (error) {
-    alert(`批量入库失败: ${error.message}`)
+    toast.error(`批量入库失败: ${error.message}`)
   } finally {
     loading.value = false
   }
@@ -365,19 +366,19 @@ async function submitBatch() {
 // 表单验证
 function validateSingleForm() {
   if (!singleForm.sku_code.trim()) {
-    alert('请填写SKU编号')
+    toast.warning('请填写SKU编号')
     return false
   }
   if (!singleForm.material_id) {
-    alert('请选择材质')
+    toast.warning('请选择材质')
     return false
   }
   if (!singleForm.cost_price || parseFloat(singleForm.cost_price) <= 0) {
-    alert('请填写有效的进价')
+    toast.warning('请填写有效的进价')
     return false
   }
   if (!singleForm.selling_price || parseFloat(singleForm.selling_price) <= 0) {
-    alert('请填写有效的售价')
+    toast.warning('请填写有效的售价')
     return false
   }
   return true
@@ -385,23 +386,23 @@ function validateSingleForm() {
 
 function validateBatchForm() {
   if (!batchForm.batch_code.trim()) {
-    alert('请填写款号')
+    toast.warning('请填写款号')
     return false
   }
   if (!batchForm.material_id) {
-    alert('请选择材质')
+    toast.warning('请选择材质')
     return false
   }
   if (!batchForm.cost_price || parseFloat(batchForm.cost_price) <= 0) {
-    alert('请填写有效的进价')
+    toast.warning('请填写有效的进价')
     return false
   }
   if (!batchForm.selling_price || parseFloat(batchForm.selling_price) <= 0) {
-    alert('请填写有效的售价')
+    toast.warning('请填写有效的售价')
     return false
   }
   if (!batchForm.quantity || parseInt(batchForm.quantity) < 1) {
-    alert('请填写有效的数量')
+    toast.warning('请填写有效的数量')
     return false
   }
   return true

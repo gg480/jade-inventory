@@ -303,6 +303,7 @@
 import { ref, onMounted } from 'vue'
 import CustomerModal from '@/components/CustomerModal.vue'
 import api from '@/api'
+import toast from '@/composables/useToast'
 // 自定义防抖函数
 function debounce(func, wait) {
   let timeout
@@ -451,7 +452,7 @@ async function handleCustomerSubmit(formData) {
 
   } catch (error) {
     console.error('保存客户失败:', error)
-    alert('保存失败: ' + (error.message || '请重试'))
+    toast.error('保存失败: ' + (error.message || '请重试'))
   } finally {
     customerModalLoading.value = false
   }
@@ -481,7 +482,7 @@ async function toggleCustomerStatus(customer) {
 
   } catch (error) {
     console.error('切换客户状态失败:', error)
-    alert('操作失败: ' + (error.message || '请重试'))
+    toast.error('操作失败: ' + (error.message || '请重试'))
   }
 }
 

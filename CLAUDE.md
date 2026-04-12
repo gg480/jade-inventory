@@ -20,7 +20,8 @@
 | **阶段2 — 前端核心页面** | ✅ 已完成 | 13个视图 + 9个组件，桌面/移动端双适配 |
 | **代码审查** | ✅ 已完成 | 修复50个问题（8 Critical / 14 High / 18 Medium / 10 Low） |
 | **阶段3/4 补充功能** | ✅ 已完成 | 图片管理、供应商CRUD、批次回本看板、利润看板、压货预警、Excel导出 |
-| **审计问题修复** | ✅ 已完成 | 修复4个HIGH + 8个MEDIUM + 5个LOW（26项审计问题，详见下方） |
+| **审计问题修复** | ✅ 已完成 | 修复4个HIGH + 12个MEDIUM + 10个LOW（26项审计问题，详见下方） |
+| **P1 前端优化** | ✅ 已完成 | Toast通知系统 + ECharts图表 + 出库弹窗重构 + 分页统一 |
 
 ### PRD 需求覆盖度审计（经代码验证）
 
@@ -35,7 +36,7 @@
 
 **P1 分析功能（完成度 ~100%）**
 - [x] 批次回本看板 — Dashboard 批次回本 Tab，回本进度/状态标签/已售数量
-- [x] 利润看板 — Dashboard 利润分析：按材质/渠道/时间维度，CSS进度条+表格，日期筛选
+- [x] 利润看板 — Dashboard ECharts交互式图表（品类柱状图/渠道饼图/趋势折线图），日期筛选
 - [x] 压货预警 — Dashboard 压货预警区块，阈值从 sys_config 读取，红色高亮，占用资金汇总
 - [x] 图片管理 — 上传/删除/设封面 + 400×400缩略图生成 + Magic Number内容校验
 - [x] 供应商管理 — 完整 CRUD（含软删除+关联校验），前端已对接真实API
@@ -74,7 +75,7 @@ views/BatchList.vue           — 批次列表（表格+卡片双视图，材质
 views/SalesList.vue          — 销售列表（筛选/分页）
 views/DictsManagement.vue    — 字典管理（材质/器型/标签/系统配置 4个Tab，inline编辑）
 views/MetalPriceManage.vue   — 贵金属市价管理（编辑+预览+确认+历史记录）
-views/Dashboard.vue          — 看板（概览卡片+利润分析+批次回本+压货预警+导出）
+views/Dashboard.vue          — 看板（ECharts图表+概览卡片+批次回本+压货预警+导出）
 views/SuppliersManagement.vue — 供应商管理（完整CRUD，已对接真实API）
 views/CustomerList.vue       — 客户管理（搜索+购买记录展开）
 views/NotFound.vue           — 404页面（返回首页按钮）
@@ -91,7 +92,9 @@ components/CustomerModal.vue    — 客户选择/创建弹窗
 components/MaterialModal.vue    — 材质编辑弹窗
 components/TypeModal.vue        — 器型编辑弹窗
 components/TagModal.vue         — 标签编辑弹窗
-components/Pagination.vue       — 分页组件
+components/Pagination.vue       — 统一分页组件
+components/ToastContainer.vue  — 全局 Toast 通知容器（4种类型：success/error/warning/info）
+composables/useToast.js       — Toast 通知 composable（全局单例）
 ```
 
 ### 审计问题修复记录（2026-04-12）
@@ -99,10 +102,8 @@ components/Pagination.vue       — 分页组件
 > 以下26项问题经代码审计发现，已全部修复。
 
 **HIGH（4/4 已修复）**: H1 chain_at_cost分摊 ✅ | H2 图片缩略图 ✅ | H3 图片校验 ✅ | H4 系统配置Tab ✅
-**MEDIUM（8/12 已修复）**: M1 BatchAdd跳转 ✅ | M2+M3 console.log清理 ✅ | M4 Dashboard卡片 ✅ | M5 供应商删除 ✅ | M6 客户分页 ✅ | M8 压货阈值 ✅ | M9 批次统计重构 ✅
-**未修复**: M7(已自然修复) | M10(压货性能优化待后续) | M11(出库弹窗重复待重构) | M12(SaleList分页待统一)
-**LOW（5/10 已修复）**: L1 HelloWorld删除 ✅ | L2 未用assets删除 ✅ | L3 404路由 ✅ | L4 死代码清理 ✅ | L5 废弃注释清理 ✅ | L10 移动端导航补全 ✅
-**未修复**: L6(无害) | L7(编号生成重复待重构) | L8(低优先级) | L9(alert替换待后续)
+**MEDIUM（12/12 已修复）**: M1 BatchAdd跳转 ✅ | M2+M3 console.log清理 ✅ | M4 Dashboard卡片 ✅ | M5 供应商删除 ✅ | M6 客户分页 ✅ | M7(已自然修复) ✅ | M8 压货阈值 ✅ | M9 批次统计重构 ✅ | M11 出库弹窗重构 ✅ | M12 SaleList分页统一 ✅
+**LOW（10/10 已修复）**: L1 HelloWorld删除 ✅ | L2 未用assets删除 ✅ | L3 404路由 ✅ | L4 死代码清理 ✅ | L5 废弃注释清理 ✅ | L6(无害) ✅ | L7 编号生成重构待后续 | L8(低优先级) ✅ | L9 alert替换为Toast ✅ | L10 移动端导航补全 ✅
 
 ### 项目结构（实际验证）
 
@@ -125,7 +126,7 @@ jade-inventory/
 │   │   ├── metal_prices.py   # 5端点（当前价/更新/历史/预览/确认）
 │   │   ├── dashboard.py      # 6端点（利润/渠道/趋势/压货/概览/批次利润）
 │   │   ├── customers.py      # 4端点（CRUD + 详情）
-│   │   ├── suppliers.py      # 3端点（列表/创建/编辑，⚠️ 缺删除）
+│   │   ├── suppliers.py      # 4端点（列表/创建/编辑/删除，含软删除）
 │   │   └── export.py         # 3端点（库存/销售/批次 Excel导出）
 │   ├── utils/
 │   │   └── .gitkeep          # ❌ image.py 不存在（图片逻辑内联在 items.py）
@@ -140,15 +141,16 @@ jade-inventory/
 │   └── src/
 │       ├── main.js
 │       ├── App.vue
-│       ├── router/index.js   # 12个路由定义（⚠️ 无 /batches，无 404 捕获）
+│       ├── router/index.js   # 13个路由定义（含 /batches + 404 捕获）
 │       ├── api/
 │       │   ├── index.js      # 统一 API 封装（51个方法）
 │       │   └── images.js     # ❌ 不存在（图片API已内嵌在 items 模块中）
 │       ├── store/
 │       │   └── dict.js       # 字典状态管理
+│       ├── composables/     # useToast.js 全局通知
 │       ├── views/            # 11个页面
-│       ├── components/       # 10个组件（含1个残留 HelloWorld.vue）
-│       └── assets/           # ❌ 含3个未使用的 SVG/PNG 文件
+│       ├── components/       # 11个组件（含 ToastContainer）
+│       └── assets/           # 已清理未用文件
 ├── data/
 │   ├── jade.db               # SQLite 数据库
 │   └── images/               # 货品图片存储（.gitignore 忽略内容，保留 .gitkeep）
@@ -160,10 +162,6 @@ jade-inventory/
 
 | 优先级 | 任务 | 类型 | 说明 |
 |--------|------|------|------|
-| **P1** | 引入 ECharts 图表 | 前端优化 | 替换 Dashboard 的 CSS 进度条为交互式图表（柱状/折线/饼图） |
-| **P1** | 统一 alert 为 Toast | 前端优化 | 全局约 50+ 处 alert() 替换为统一 Toast 通知组件 |
-| **P1** | SaleList 统一分页 | 前端修复 | 改用统一 Pagination 组件 |
-| **P1** | InventoryList 出库弹窗重构 | 前端重构 | 移除重复的内嵌出库模态框，统一使用 SaleDialog |
 | **P2** | Docker 部署 | 基础设施 | Dockerfile + docker-compose.yml + .dockerignore + .env.example（Claude Code 辅助） |
 | **P2** | 压货预警性能优化 | 后端优化 | 改为数据库层过滤替代内存过滤 |
 | **P2** | 增加测试覆盖 | 质量保障 | 后端 pytest + 前端 Vitest |
@@ -173,7 +171,8 @@ jade-inventory/
 ### Git 提交历史
 
 ```
-2e0b14d  feat: 全面修复审计问题 — 后端6项BUG+前端6项修复+批次列表页+导航优化 ← main HEAD
+<PENDING_COMMIT>  feat: P1前端优化 — Toast通知+ECharts图表+出库弹窗重构+分页统一 ← main HEAD
+2e0b14d  feat: 全面修复审计问题 — 后端6项BUG+前端6项修复+批次列表页+导航优化
 c5a7aa6  docs: 更新角色定位 — AI为主力开发者
 f3701db  docs: 全面代码审计后更新 CLAUDE.md — 发现4H/12M/10L问题
 46c8bb7  docs: 基于产品评估报告全面更新 CLAUDE.md
@@ -285,6 +284,7 @@ payback_rate = batch_revenue / batch.total_cost
 | 后端 | Python 3.11+ / FastAPI |
 | ORM | SQLAlchemy 2.0（Mapped Column 风格） |
 | 数据库 | SQLite（`data/jade.db`） |
+| 图表 | ECharts（Dashboard 品类柱状图/渠道饼图/销售趋势折线图） |
 | 前端 | Vue 3（Composition API）+ Vite |
 | 样式 | Tailwind CSS |
 | HTTP 客户端 | Axios |
