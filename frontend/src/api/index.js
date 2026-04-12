@@ -225,6 +225,30 @@ const metal = {
   updateMetalPrice: (data) => api.post('/metal-prices', data), // 旧版本，不推荐
 }
 
+const labels = {
+  // 单件标签数据（含条码 base64）
+  getLabel: (itemId) => api.get(`/labels/item/${itemId}`),
+  // 批量标签数据
+  getBatchLabels: (itemIds) => api.post('/labels/batch', null, { params: { item_ids: itemIds } }),
+  // 条码图片
+  getBarcode: (skuCode) => api.get(`/labels/barcode/${skuCode}`, { responseType: 'blob' }),
+  // SKU 扫码查询
+  lookupBySku: (sku) => api.get('/labels/lookup', { params: { sku } }),
+}
+
+const pricing = {
+  // 全材质销售统计
+  getMaterialStats: () => api.get('/pricing/material-stats'),
+  // 单材质销售统计
+  getMaterialStatsById: (materialId) => api.get(`/pricing/material-stats/${materialId}`),
+  // 定价推荐
+  getRecommendation: (params) => api.get('/pricing/recommend', { params }),
+  // 按器型统计
+  getTypeStats: (materialId) => api.get(`/pricing/type-stats/${materialId}`),
+  // 定价参数配置
+  getConfig: () => api.get('/pricing/config'),
+}
+
 // 图片URL前缀
 export const IMAGE_BASE_URL = '/data/images'
 
@@ -238,6 +262,8 @@ export default {
   dashboard,
   metal,
   exportData,
+  labels,
+  pricing,
   IMAGE_BASE_URL,
   // 原始axios实例（特殊情况使用）
   instance: api,

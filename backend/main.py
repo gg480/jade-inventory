@@ -23,6 +23,8 @@ from routers.suppliers import router as suppliers_router
 from routers.dashboard import router as dashboard_router
 from routers.metal_prices import router as metal_prices_router
 from routers.export import router as export_router
+from routers.label import router as label_router
+from routers.pricing import router as pricing_router
 from config import IMAGE_DIR
 
 
@@ -112,6 +114,8 @@ app.include_router(suppliers_router,   prefix=_API_PREFIX)
 app.include_router(dashboard_router,    prefix=_API_PREFIX)
 app.include_router(metal_prices_router,  prefix=_API_PREFIX)
 app.include_router(export_router,       prefix=_API_PREFIX)
+app.include_router(label_router,        prefix=_API_PREFIX)
+app.include_router(pricing_router,      prefix=_API_PREFIX)
 
 
 # ── 健康检查 ──

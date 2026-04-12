@@ -13,6 +13,9 @@ const CustomerList = () => import('../views/CustomerList.vue')
 const SuppliersManagement = () => import('../views/SuppliersManagement.vue')
 const BatchList = () => import('../views/BatchList.vue')
 const NotFound = () => import('../views/NotFound.vue')
+const LabelPrint = () => import('../views/LabelPrint.vue')
+const ScanSell = () => import('../views/ScanSell.vue')
+const PricingCalculator = () => import('../views/PricingCalculator.vue')
 
 const routes = [
   {
@@ -62,6 +65,24 @@ const routes = [
     name: 'sales',
     component: SaleList,
     meta: { title: '销售记录' }
+  },
+  {
+    path: '/scan',
+    name: 'scan-sell',
+    component: ScanSell,
+    meta: { title: '扫码出库' }
+  },
+  {
+    path: '/labels',
+    name: 'label-print',
+    component: LabelPrint,
+    meta: { title: '标签打印' }
+  },
+  {
+    path: '/pricing',
+    name: 'pricing-calculator',
+    component: PricingCalculator,
+    meta: { title: '利润测算' }
   },
   {
     path: '/dashboard',

@@ -119,6 +119,11 @@ function editItem() {
   router.push(`/inventory/edit/${route.params.id}`)
 }
 
+// 打印标签
+function printLabel() {
+  router.push(`/labels?ids=${route.params.id}`)
+}
+
 // 打开出库弹窗
 function openCheckoutModal() {
   showSaleDialog.value = true
@@ -220,6 +225,13 @@ onMounted(() => {
             class="btn btn-primary"
           >
             编辑
+          </button>
+          <button
+            v-if="item.status === 'in_stock'"
+            @click="printLabel"
+            class="btn btn-secondary"
+          >
+            打印标签
           </button>
           <button
             v-if="item.status === 'in_stock'"

@@ -55,8 +55,8 @@
                 to="/sales"
                 class="px-3 py-2 text-sm font-medium rounded-md transition-colors"
                 :class="{
-                  'text-emerald-700 bg-emerald-50': $route.path.startsWith('/sales'),
-                  'text-gray-700 hover:text-emerald-600 hover:bg-gray-50': !$route.path.startsWith('/sales')
+                  'text-emerald-700 bg-emerald-50': $route.path.startsWith('/sales') || $route.path === '/scan',
+                  'text-gray-700 hover:text-emerald-600 hover:bg-gray-50': !$route.path.startsWith('/sales') && $route.path !== '/scan'
                 }"
               >
                 销售
@@ -70,6 +70,16 @@
                 }"
               >
                 看板
+              </router-link>
+              <router-link
+                to="/pricing"
+                class="px-3 py-2 text-sm font-medium rounded-md transition-colors"
+                :class="{
+                  'text-emerald-700 bg-emerald-50': $route.path === '/pricing',
+                  'text-gray-700 hover:text-emerald-600 hover:bg-gray-50': $route.path !== '/pricing'
+                }"
+              >
+                定价
               </router-link>
 
               <router-link
@@ -88,19 +98,33 @@
                 <button
                   class="px-3 py-2 text-sm font-medium rounded-md transition-colors flex items-center"
                   :class="{
-                    'text-emerald-700 bg-emerald-50': $route.path.startsWith('/settings'),
-                    'text-gray-700 hover:text-emerald-600 hover:bg-gray-50': !$route.path.startsWith('/settings')
+                    'text-emerald-700 bg-emerald-50': $route.path.startsWith('/settings') || $route.path === '/labels',
+                    'text-gray-700 hover:text-emerald-600 hover:bg-gray-50': !$route.path.startsWith('/settings') && $route.path !== '/labels'
                   }"
                 >
-                  设置
+                  工具
                   <svg class="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                   </svg>
                 </button>
                 <div class="absolute left-0 mt-1 w-48 bg-white rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10 border border-gray-200">
                   <router-link
-                    to="/settings/dicts"
+                    to="/scan"
                     class="block px-4 py-3 text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 rounded-t-md"
+                    :class="{ 'bg-emerald-50 text-emerald-700': $route.path === '/scan' }"
+                  >
+                    扫码出库
+                  </router-link>
+                  <router-link
+                    to="/labels"
+                    class="block px-4 py-3 text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-700"
+                    :class="{ 'bg-emerald-50 text-emerald-700': $route.path === '/labels' }"
+                  >
+                    标签打印
+                  </router-link>
+                  <router-link
+                    to="/settings/dicts"
+                    class="block px-4 py-3 text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-700"
                     :class="{ 'bg-emerald-50 text-emerald-700': $route.path === '/settings/dicts' }"
                   >
                     字典管理
@@ -156,8 +180,8 @@
           to="/sales"
           class="flex-1 flex flex-col items-center justify-center h-full text-[10px] font-medium transition-colors gap-0.5"
           :class="{
-            'text-emerald-600': $route.path.startsWith('/sales'),
-            'text-gray-500': !$route.path.startsWith('/sales')
+            'text-emerald-600': $route.path.startsWith('/sales') || $route.path === '/scan',
+            'text-gray-500': !$route.path.startsWith('/sales') && $route.path !== '/scan'
           }"
         >
           <!-- 销售图标: 购物车 -->
@@ -165,6 +189,24 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z" />
           </svg>
           <span>销售</span>
+        </router-link>
+
+        <!-- 扫码（突出按钮） -->
+        <router-link
+          to="/scan"
+          class="flex-1 flex flex-col items-center justify-center h-full text-[10px] font-medium transition-colors gap-0.5"
+          :class="{
+            'text-emerald-600': $route.path === '/scan',
+            'text-gray-500': $route.path !== '/scan'
+          }"
+        >
+          <!-- 扫码图标: 条码扫描 -->
+          <div class="w-10 h-10 -mt-4 bg-emerald-600 rounded-full flex items-center justify-center shadow-lg">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+            </svg>
+          </div>
+          <span class="-mt-1">扫码</span>
         </router-link>
 
         <!-- 看板 -->
