@@ -1,6 +1,8 @@
 # CLAUDE.md — 玉器店进销存系统
 
-## 你在做什么
+> **角色说明**：本文件是主力开发者（AI）的工作上下文与进度追踪，每次新会话的第一入口。Claude Code 仅在本地部署阶段辅助使用，不参与日常开发。
+
+## 项目定位
 
 这是一个面向珠宝玉器实体店店主的进销存管理系统，核心目标不是"记账"，而是**决策支持**——让店主快速回答：哪个批次回本了？哪些货在压货？哪个品类利润率最高？贵金属市价变了我需要调哪些价？
 
@@ -202,7 +204,7 @@ jade-inventory/
 | **P1** | 客户列表分页元数据 | 后端修复 | 响应中补充 pagination 字段 |
 | **P1** | 清理调试代码 | 全栈清理 | 删除 console.log × 8处、HelloWorld.vue、未使用 assets |
 | **P1** | 引入 ECharts 图表 | 前端优化 | 替换 Dashboard 的 CSS 进度条为交互式图表 |
-| **P2** | Docker 部署 | 基础设施 | Dockerfile + docker-compose.yml + .dockerignore + .env.example |
+| **P2** | Docker 部署 | 基础设施 | Dockerfile + docker-compose.yml + .dockerignore + .env.example（Claude Code 辅助） |
 | **P2** | 提取重复批次统计逻辑 | 后端重构 | dashboard/batches/export 三处重复代码提取为公共模块 |
 | **P2** | 统一 alert 为 Toast | 前端优化 | 全局约 50+ 处 alert() 替换 |
 | **P2** | 移动端导航补全 | 前端优化 | 底部 Tab 增加"客户"/"供应商"入口 |
@@ -225,16 +227,17 @@ c3356a3  Merge branch 'master' into main
 
 ## 必读的配套文档
 
-开始任何工作之前，先阅读项目根目录下的：
+开始任何开发工作之前，先阅读项目根目录下的：
 
 - **`PRD.md`** — 产品需求文档 v2.1，包含完整业务模型、功能优先级、数据模型概览、种子数据。**这是需求的唯一权威来源。**
 - **`TECH_SPEC.md`** — 技术规格，包含详细表结构和 API 契约。
+- **`CLAUDE.md`（本文件）** — 当前进度、审计发现、待修复问题清单、业务概念速查。
 
 ---
 
-## 珠宝行业核心业务概念
+## 珠宝行业核心业务概念（速查）
 
-写代码前必须内化以下概念，它们直接影响数据模型和算法设计：
+> 这些概念直接影响数据模型和算法设计，每次修改相关代码前快速回顾。
 
 ### 1. 双轨库存模型（最重要）
 
@@ -325,7 +328,7 @@ payback_rate = batch_revenue / batch.total_cost
 | 图片处理 | Pillow（已安装，缩略图功能待实现） |
 | Excel 导出 | openpyxl |
 | 测试 | pytest（后端）/ Vitest（前端，配置存在但覆盖不足） |
-| 部署 | Docker + docker-compose → 极空间 NAS（❌ 待创建） |
+| 部署 | Docker + docker-compose → 极空间 NAS（❌ 待创建，Claude Code 辅助） |
 
 ## 数据模型概览（14张表）
 
@@ -363,7 +366,7 @@ cd frontend && npm install && npm run dev
 # 前端构建
 cd frontend && npm run build
 
-# Docker（待创建）
+# Docker（待创建，Claude Code 辅助）
 docker-compose up --build
 
 # API 测试
