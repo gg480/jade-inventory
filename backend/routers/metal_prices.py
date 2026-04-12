@@ -1,19 +1,23 @@
 """
-贵金属市价管理路由 — 市价查询、更新、历史记录。
+贵金属市价管理路由 — 市价查询、更新、历史记录、自动抓取。
 
 市价表（metal_prices）记录各材质（贵金属）的克重单价历史。
 每次调价插入新记录，不覆盖旧数据。
+支持从新浪财经接口自动获取实时价格。
 """
 
 import datetime
-from typing import List, Optional
+import logging
+import re
+import urllib.request
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 
 from database import get_db
-from models import MetalPrice, DictMaterial, Item, ItemSpec
+from models import MetalPrice, DictMaterial, Item, ItemSpec, SysConfig
 from schemas import (
     ApiResponse,
     MetalPriceUpdate,
@@ -21,6 +25,8 @@ from schemas import (
     RepriceRequest,
     RepricePreview,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/metal-prices", tags=["贵金属市价"])
 
@@ -299,3 +305,222 @@ def confirm_reprice(
     db.commit()
 
     return ApiResponse(data=RepricePreview(affected_items=affected))
+
+
+# ──────────────────────────────────────────────
+# 新浪财经实时价格抓取（免费，无需 API Key）
+# ──────────────────────────────────────────────
+
+# 通用请求头，模拟浏览器访问
+_SINA_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                  '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Referer': 'https://finance.sina.com.cn',
+}
+
+
+def _fetch_sina_gold_price() -> Optional[float]:
+    """获取黄金实时价格（上海金交所 Au99.99，单位：元/克）"""
+    url = "https://hq.sinajs.cn/list=Au99.99"
+    try:
+        req = urllib.request.Request(url, headers=_SINA_HEADERS)
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = resp.read().decode('gbk')
+            # 解析格式: var hq_str_Au99.99="Au99.99,开盘价,最高价,...,当前价,...";
+            match = re.search(r'"(.*?)"', data)
+            if match:
+                fields = match.group(1).split(',')
+                # 第0位是品种名，第6位是当前价
+                if len(fields) >= 7:
+                    try:
+                        return float(fields[6])
+                    except (ValueError, IndexError):
+                        pass
+            logger.warning("[sina_gold] 返回数据格式异常: %s", data[:100])
+    except Exception as e:
+        logger.error("[sina_gold] 抓取失败: %s", e)
+    return None
+
+
+def _fetch_sina_silver_price() -> Optional[float]:
+    """获取白银实时价格（Ag(T+D)，单位：元/千克，需要转换为元/克）"""
+    url = "https://hq.sinajs.cn/list=Ag(T+D)"
+    try:
+        req = urllib.request.Request(url, headers=_SINA_HEADERS)
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = resp.read().decode('gbk')
+            # 解析格式: var hq_str_Ag(T+D)="Ag(T+D),开盘价,...,当前价,...";
+            match = re.search(r'"(.*?)"', data)
+            if match:
+                fields = match.group(1).split(',')
+                if len(fields) >= 7:
+                    try:
+                        # 白银 Ag(T+D) 报价为元/千克，转换为元/克
+                        return round(float(fields[6]) / 1000, 2)
+                    except (ValueError, IndexError):
+                        pass
+            logger.warning("[sina_silver] 返回数据格式异常: %s", data[:100])
+    except Exception as e:
+        logger.error("[sina_silver] 抓取失败: %s", e)
+    return None
+
+
+def _fetch_sina_platinum_price() -> Optional[float]:
+    """获取铂金实时价格（Pt99.95，单位：元/克）"""
+    url = "https://hq.sinajs.cn/list=Pt99.95"
+    try:
+        req = urllib.request.Request(url, headers=_SINA_HEADERS)
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = resp.read().decode('gbk')
+            # 解析格式: var hq_str_Pt99.95="Pt99.95,开盘价,...,当前价,...";
+            match = re.search(r'"(.*?)"', data)
+            if match:
+                fields = match.group(1).split(',')
+                if len(fields) >= 7:
+                    try:
+                        return float(fields[6])
+                    except (ValueError, IndexError):
+                        pass
+            logger.warning("[sina_platinum] 返回数据格式异常: %s", data[:100])
+    except Exception as e:
+        logger.error("[sina_platinum] 抓取失败: %s", e)
+    return None
+
+
+# 材质名称 ↔ 数据源映射
+# Au99.99 为纯金价格，18K金 = 纯金 × 0.75
+_MATERIAL_FETCH_MAP = {
+    "18K金": {"fetcher": _fetch_sina_gold_price, "factor": 0.75, "source": "Au99.99"},
+    "银":    {"fetcher": _fetch_sina_silver_price, "factor": 1.0,  "source": "Ag(T+D)"},
+    "k铂金": {"fetcher": _fetch_sina_platinum_price, "factor": 1.0,  "source": "Pt99.95"},
+}
+
+
+@router.get(
+    "/fetch",
+    response_model=ApiResponse,
+    summary="自动获取贵金属实时价格",
+    description="从新浪财经接口抓取黄金、白银、铂金实时价格，"
+                "写入 metal_prices 表并更新 sys_config 中的抓取状态。",
+)
+def fetch_metal_prices(db: Session = Depends(get_db)) -> ApiResponse:
+    """
+    自动获取贵金属实时价格。
+    数据源：新浪财经接口（免费，无需 API Key）
+
+    流程：
+    1. 逐个调用新浪接口获取 Au99.99 / Ag(T+D) / Pt99.95 价格
+    2. 按映射关系写入 metal_prices 表（新记录，不覆盖旧数据）
+    3. 更新 sys_config 中 last_price_fetch_time 和 last_price_fetch_status
+    4. 返回获取到的最新价格列表
+    """
+    fetch_results: List[Dict] = []
+    success_count = 0
+    fail_count = 0
+    errors: List[str] = []
+
+    for material_name, cfg in _MATERIAL_FETCH_MAP.items():
+        # 查找数据库中对应的材质记录
+        material = db.query(DictMaterial).filter(DictMaterial.name == material_name).first()
+        if not material:
+            errors.append(f"材质 '{material_name}' 在数据库中不存在，跳过")
+            fail_count += 1
+            continue
+
+        # 调用抓取函数
+        raw_price = cfg["fetcher"]()
+        if raw_price is None:
+            errors.append(f"{material_name}（{cfg['source']}）抓取失败，网络不通或接口异常")
+            fail_count += 1
+            continue
+
+        # 应用换算系数（如 18K金 = 纯金 × 0.75）
+        final_price = round(raw_price * cfg["factor"], 2)
+
+        # 插入新记录到 metal_prices 表
+        new_record = MetalPrice(
+            material_id=material.id,
+            price_per_gram=final_price,
+            effective_date=datetime.date.today(),
+        )
+        db.add(new_record)
+
+        fetch_results.append({
+            "material_name": material_name,
+            "source": cfg["source"],
+            "raw_price": raw_price,
+            "factor": cfg["factor"],
+            "final_price": final_price,
+        })
+        success_count += 1
+        logger.info(
+            "[fetch] %s: 原始价=%.2f, 系数=%.2f, 最终价=%.2f",
+            material_name, raw_price, cfg["factor"], final_price,
+        )
+
+    db.commit()
+
+    # 更新 sys_config 中的抓取状态
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if fail_count == 0:
+        status_msg = "成功"
+    elif success_count == 0:
+        status_msg = "全部失败"
+    else:
+        status_msg = f"部分成功（成功 {success_count}，失败 {fail_count}）"
+
+    for cfg_key, cfg_val in [
+        ("last_price_fetch_time", now_str),
+        ("last_price_fetch_status", status_msg),
+    ]:
+        config_record = db.query(SysConfig).filter(SysConfig.key == cfg_key).first()
+        if config_record:
+            config_record.value = cfg_val
+        else:
+            db.add(SysConfig(key=cfg_key, value=cfg_val))
+    db.commit()
+
+    # 构建响应
+    if success_count == 0:
+        return ApiResponse(
+            code=1,
+            data={"fetched": fetch_results, "errors": errors},
+            message=f"抓取失败：{'；'.join(errors)}",
+        )
+
+    return ApiResponse(
+        data={
+            "fetched": fetch_results,
+            "errors": errors,
+            "summary": {
+                "success_count": success_count,
+                "fail_count": fail_count,
+                "fetch_time": now_str,
+            },
+        },
+        message=status_msg,
+    )
+
+
+@router.get(
+    "/fetch-status",
+    response_model=ApiResponse,
+    summary="获取最近一次自动抓取状态",
+    description="从 sys_config 表读取 last_price_fetch_time 和 last_price_fetch_status。",
+)
+def get_fetch_status(db: Session = Depends(get_db)) -> ApiResponse:
+    """
+    获取最近一次自动抓取的状态和时间。
+    从 sys_config 表读取 last_price_fetch_time 和 last_price_fetch_status。
+    """
+    configs = db.query(SysConfig).filter(
+        SysConfig.key.in_(["last_price_fetch_time", "last_price_fetch_status", "auto_fetch_prices"])
+    ).all()
+
+    config_map = {c.key: c.value for c in configs}
+
+    return ApiResponse(data={
+        "last_fetch_time": config_map.get("last_price_fetch_time", ""),
+        "last_fetch_status": config_map.get("last_price_fetch_status", ""),
+        "auto_fetch_enabled": config_map.get("auto_fetch_prices", "false") == "true",
+    })

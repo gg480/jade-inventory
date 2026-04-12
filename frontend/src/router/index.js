@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 // 页面组件（懒加载）
+const Login = () => import('../views/Login.vue')
 const InventoryList = () => import('../views/InventoryList.vue')
 const InventoryDetail = () => import('../views/InventoryDetail.vue')
 const InventoryAdd = () => import('../views/InventoryAdd.vue')
@@ -16,8 +17,15 @@ const NotFound = () => import('../views/NotFound.vue')
 const LabelPrint = () => import('../views/LabelPrint.vue')
 const ScanSell = () => import('../views/ScanSell.vue')
 const PricingCalculator = () => import('../views/PricingCalculator.vue')
+const AccountSettings = () => import('../views/AccountSettings.vue')
 
 const routes = [
+  {
+    path: '/login',
+    name: 'login',
+    component: Login,
+    meta: { title: '登录', noLayout: true, public: true }
+  },
   {
     path: '/',
     redirect: '/inventory',
@@ -103,6 +111,12 @@ const routes = [
     meta: { title: '贵金属市价管理' }
   },
   {
+    path: '/settings/account',
+    name: 'account-settings',
+    component: AccountSettings,
+    meta: { title: '账户设置' }
+  },
+  {
     path: '/customers',
     name: 'customers',
     component: CustomerList,
@@ -127,9 +141,24 @@ const router = createRouter({
   routes,
 })
 
-// 全局前置守卫：设置页面标题
+// 全局前置守卫：认证检查 + 页面标题
 router.beforeEach((to, from, next) => {
+  // 设置页面标题
   document.title = to.meta.title ? `${to.meta.title} - 玉器店进销存` : '玉器店进销存'
+
+  const token = localStorage.getItem('token')
+  const isPublic = to.meta.public
+
+  // 已登录用户访问登录页 → 重定向到首页
+  if (to.path === '/login' && token) {
+    return next('/inventory')
+  }
+
+  // 未登录用户访问非公开页面 → 重定向到登录页
+  if (!isPublic && !token) {
+    return next('/login')
+  }
+
   next()
 })
 

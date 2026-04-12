@@ -81,6 +81,21 @@ def seed_data(session: Session) -> None:
     - 4 条系统配置
     - 2 条贵金属初始市价（18K金780、银25）
     """
+    # 即使已有材质数据，也需要补充缺失的系统配置
+    from models import SysConfig
+    _missing_configs = [
+        ("auto_fetch_prices", "是否自动获取贵金属市价"),
+        ("last_price_fetch_time", "最近一次市价抓取时间"),
+        ("last_price_fetch_status", "最近一次市价抓取状态"),
+    ]
+    for cfg_key, cfg_desc in _missing_configs:
+        existing = session.execute(
+            text("SELECT id FROM sys_config WHERE key = :k"), {"k": cfg_key}
+        ).scalar()
+        if not existing:
+            session.add(SysConfig(key=cfg_key, value="", description=cfg_desc))
+    session.commit()
+
     # 检查 dict_material 表是否已有数据，有则跳过
     result = session.execute(text("SELECT COUNT(*) FROM dict_material"))
     count = result.scalar()
@@ -184,7 +199,7 @@ def seed_data(session: Session) -> None:
     ]
     session.add_all(tags)
 
-    # 4. 4条系统配置
+    # 4. 系统配置（含自动抓取配置）
     configs = [
         SysConfig(key="operating_cost_rate", value="0.05", description="经营成本率（分摊成本的5%）"),
         SysConfig(key="markup_rate", value="0.30", description="上浮比例（底价的30%）"),
@@ -192,6 +207,18 @@ def seed_data(session: Session) -> None:
         SysConfig(key="default_alloc_method", value="equal", description="默认成本分摊算法：均摊"),
     ]
     session.add_all(configs)
+
+    # 5. 管理员默认密码（bcrypt hash of "admin123"）
+    import bcrypt
+    _default_password = "admin123"
+    _hashed_password = bcrypt.hashpw(
+        _default_password.encode("utf-8"), bcrypt.gensalt()
+    ).decode("utf-8")
+    admin_configs = [
+        SysConfig(key="admin_password", value=_hashed_password, description="管理员登录密码"),
+        SysConfig(key="admin_password_changed", value="false", description="密码是否已从默认值修改"),
+    ]
+    session.add_all(admin_configs)
 
     # 提交以便获取材质ID
     session.commit()

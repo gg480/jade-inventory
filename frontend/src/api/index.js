@@ -10,14 +10,13 @@ const api = axios.create({
   },
 })
 
-// 请求拦截器：可以在这里添加token等
+// 请求拦截器：添加认证token
 api.interceptors.request.use(
   (config) => {
-    // 可以添加认证token等
-    // const token = localStorage.getItem('token')
-    // if (token) {
-    //   config.headers.Authorization = `Bearer ${token}`
-    // }
+    const token = localStorage.getItem('token')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
     return config
   },
   (error) => {
@@ -58,12 +57,19 @@ api.interceptors.response.use(
     // HTTP错误
     let message = '网络错误，请稍后重试'
     if (error.response) {
+      // 401 未授权：清除token并跳转到登录页
+      if (error.response.status === 401) {
+        localStorage.removeItem('token')
+        // 避免在登录页重复跳转
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login'
+        }
+        return Promise.reject(error)
+      }
+
       switch (error.response.status) {
         case 400:
           message = '请求参数错误'
-          break
-        case 401:
-          message = '未授权，请登录'
           break
         case 403:
           message = '拒绝访问'
@@ -92,6 +98,18 @@ api.interceptors.response.use(
     return Promise.reject(error)
   }
 )
+
+// 认证相关API
+const auth = {
+  /** 管理员登录 */
+  login: (password) => api.post('/auth/login', { password }),
+  /** 修改密码 */
+  changePassword: (oldPassword, newPassword) => api.post('/auth/change-password', { old_password: oldPassword, new_password: newPassword }),
+  /** 获取当前用户信息 */
+  me: () => api.get('/auth/me'),
+  /** 备份数据库 */
+  backupDB: () => api.get('/auth/backup-db', { responseType: 'blob' }),
+}
 
 // API模块
 const dicts = {
@@ -253,6 +271,7 @@ const pricing = {
 export const IMAGE_BASE_URL = '/data/images'
 
 export default {
+  auth,
   dicts,
   batches,
   items,
