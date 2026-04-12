@@ -1,5 +1,5 @@
 """
-供应商管理路由 — 供应商列表、新增、编辑。
+供应商管理路由 — 供应商列表、新增、编辑、删除。
 
 供应商名称需保持唯一（包含已停用的供应商，防止激活冲突）。
 """
@@ -11,7 +11,7 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import Supplier
+from models import Supplier, Batch
 from schemas import ApiResponse, SupplierCreate, SupplierOut, SupplierListOut, SupplierUpdate, PaginationMeta
 
 router = APIRouter(prefix="/suppliers", tags=["供应商管理"])
@@ -75,7 +75,7 @@ def create_supplier(
     if db.query(Supplier).filter(Supplier.name == body.name).first():
         raise HTTPException(
             status_code=400,
-            detail={"code": 400, "message": f"供应商「{body.name}」已存在"}
+            detail=f"供应商「{body.name}」已存在"
         )
 
     supplier = Supplier(
@@ -114,7 +114,7 @@ def update_supplier(
         if db.query(Supplier).filter(Supplier.name == body.name).first():
             raise HTTPException(
                 status_code=400,
-                detail={"code": 400, "message": f"供应商「{body.name}」已存在"}
+                detail=f"供应商「{body.name}」已存在"
             )
         supplier.name = body.name
 
@@ -128,5 +128,36 @@ def update_supplier(
     db.commit()
     db.refresh(supplier)
     return ApiResponse(data=SupplierOut.model_validate(supplier))
+
+
+# ══════════════════════════════════════════════
+# 删除供应商（软删除）
+# ══════════════════════════════════════════════
+
+@router.delete(
+    "/{supplier_id}",
+    response_model=ApiResponse[None],
+    summary="停用供应商（软删除）",
+    description="将供应商标记为已停用。如果该供应商下有关联批次，则不允许删除。",
+)
+def delete_supplier(
+    supplier_id: int,
+    db: Session = Depends(get_db),
+) -> ApiResponse[None]:
+    supplier = db.get(Supplier, supplier_id)
+    if not supplier:
+        raise HTTPException(status_code=404, detail="供应商不存在")
+
+    # 检查是否有关联的批次
+    batch_count = db.query(Batch).filter(Batch.supplier_id == supplier_id).count()
+    if batch_count > 0:
+        raise HTTPException(
+            status_code=400,
+            detail="该供应商下有关联批次，无法删除"
+        )
+
+    supplier.is_active = False
+    db.commit()
+    return ApiResponse(message="已停用")
 
 

@@ -17,8 +17,10 @@ from schemas import (
     ApiResponse,
     CustomerCreate,
     CustomerDetailOut,
+    CustomerListOut,
     CustomerOut,
     CustomerUpdate,
+    PaginationMeta,
     SaleRecordOut,
 )
 
@@ -72,9 +74,9 @@ def _generate_customer_code(db: Session) -> str:
 
 @router.get(
     "/",
-    response_model=ApiResponse[List[CustomerOut]],
+    response_model=ApiResponse[CustomerListOut],
     summary="获取客户列表",
-    description="支持按姓名、电话、微信号搜索，默认只返回启用的客户。",
+    description="支持按姓名、电话、微信号搜索，默认只返回启用的客户。支持分页。",
 )
 def list_customers(
     name: Optional[str] = Query(None, description="按姓名模糊搜索"),
@@ -84,7 +86,7 @@ def list_customers(
     page: int = Query(1, ge=1, description="页码"),
     size: int = Query(100, ge=1, le=500, description="每页条数"),
     db: Session = Depends(get_db),
-) -> ApiResponse[List[CustomerOut]]:
+) -> ApiResponse[CustomerListOut]:
     q = db.query(Customer)
 
     if name:
@@ -98,13 +100,19 @@ def list_customers(
         q = q.filter(Customer.is_active == True)
 
     total = q.count()
+    total_pages = (total + size - 1) // size if total > 0 else 1
     customers = (
         q.order_by(desc(Customer.created_at), Customer.id)
         .offset((page - 1) * size)
         .limit(size)
         .all()
     )
-    return ApiResponse(data=[CustomerOut.model_validate(c) for c in customers])
+    return ApiResponse(
+        data=CustomerListOut(
+            items=[CustomerOut.model_validate(c) for c in customers],
+            pagination=PaginationMeta(total=total, page=page, size=size, pages=total_pages),
+        )
+    )
 
 
 # ══════════════════════════════════════════════

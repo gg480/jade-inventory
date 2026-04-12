@@ -49,9 +49,6 @@ onBeforeUnmount(() => {
   document.removeEventListener('click', handleClickOutside)
 })
 
-// 是否显示列表
-const showList = ref(true)
-
 // 选中的货品（用于批量操作）
 const selectedItems = ref(new Set())
 
@@ -401,7 +398,7 @@ onMounted(() => {
     </div>
 
     <!-- 统计卡片 -->
-    <div v-if="showList && !loading && items.length > 0" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div v-if="!loading && items.length > 0" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
       <div class="card text-center">
         <div class="text-sm text-gray-500">总库存</div>
         <div class="text-2xl font-bold text-gray-900 mt-1">{{ pagination.total }}</div>
@@ -527,9 +524,7 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- 列表部分（开发阶段先隐藏） -->
-    <div v-if="showList">
-      <!-- 批量操作栏 -->
+    <!-- 批量操作栏 -->
       <div v-if="items.length > 0 && !loading" class="card mb-4">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between">
         <div class="flex items-center space-x-4 mb-3 sm:mb-0">
@@ -739,7 +734,6 @@ onMounted(() => {
         @update:page="onPageChange"
         class="mt-6"
       />
-    </div>
     </div>
 
     <!-- 出库模态框 -->

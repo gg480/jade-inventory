@@ -32,6 +32,9 @@ const loading = ref(false)
 const customers = ref([])
 const loadingCustomers = ref(false)
 
+// chain_at_cost: 标记哪些货品是链子（与 items 顺序一一对应）
+const chainItems = ref([])
+
 // 计算属性：是否为移动端
 const isMobile = computed(() => {
   return window.innerWidth < 768 // Tailwind md 断点
@@ -89,6 +92,8 @@ function resetForm() {
   form.note = ''
   error.value = ''
   loading.value = false
+  // 重置链子标记：全部为 false（非链子）
+  chainItems.value = props.items.map(() => false)
 }
 
 // 加载客户列表
@@ -113,6 +118,16 @@ async function loadCustomers() {
   }
 }
 
+// 切换链子标记
+function toggleChain(index) {
+  chainItems.value[index] = !chainItems.value[index]
+}
+
+// 主件数量（未被标记为链子的）
+const mainItemCount = computed(() => {
+  return chainItems.value.filter(isChain => !isChain).length
+})
+
 // 提交表单
 async function submitForm() {
   if (!form.total_price || parseFloat(form.total_price) <= 0) {
@@ -123,6 +138,14 @@ async function submitForm() {
   if (props.items.length === 0) {
     alert('请选择至少一件货品')
     return
+  }
+
+  // chain_at_cost 校验：至少要有1件主件
+  if (form.alloc_method === 'chain_at_cost') {
+    if (mainItemCount.value === 0) {
+      alert('至少需要保留1件主件（不能全部标记为链子）')
+      return
+    }
   }
 
   error.value = ''
@@ -137,6 +160,11 @@ async function submitForm() {
       sale_date: form.sale_date,
       customer_id: form.customer_id || undefined,
       note: form.note
+    }
+
+    // chain_at_cost 时附带 chain_items 数组
+    if (form.alloc_method === 'chain_at_cost') {
+      saleData.chain_items = chainItems.value
     }
 
     await api.sales.createBundleSale(saleData)
@@ -216,10 +244,24 @@ onMounted(() => {
           <div class="mb-6">
             <label class="form-label">已选货品</label>
             <div class="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-md p-3">
-              <div v-for="item in items" :key="item.id" class="flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0">
-                <div class="flex-1">
-                  <div class="text-sm font-medium text-gray-900">{{ item.sku_code }}</div>
-                  <div class="text-xs text-gray-500">{{ item.material_name }} <span v-if="item.name">({{ item.name }})</span></div>
+              <div v-for="(item, index) in items" :key="item.id" class="flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0">
+                <div class="flex items-center flex-1">
+                  <!-- chain_at_cost 勾选框 -->
+                  <input
+                    v-if="form.alloc_method === 'chain_at_cost'"
+                    type="checkbox"
+                    :checked="chainItems[index]"
+                    @change="toggleChain(index)"
+                    class="h-4 w-4 text-amber-600 rounded border-gray-300 focus:ring-amber-500 mr-2 flex-shrink-0"
+                    title="标记为链子/绳子类"
+                  />
+                  <div class="flex-1 min-w-0">
+                    <div class="text-sm font-medium text-gray-900">
+                      {{ item.sku_code }}
+                      <span v-if="form.alloc_method === 'chain_at_cost' && chainItems[index]" class="ml-1 px-1.5 py-0.5 text-xs rounded bg-amber-100 text-amber-700">链子</span>
+                    </div>
+                    <div class="text-xs text-gray-500">{{ item.material_name }} <span v-if="item.name">({{ item.name }})</span></div>
+                  </div>
                 </div>
                 <div class="text-sm text-gray-700 ml-4">
                   ¥{{ (item.selling_price || 0).toFixed(2) }}
@@ -261,19 +303,25 @@ onMounted(() => {
                   />
                   <span class="ml-2">按售价比例分摊</span>
                 </label>
-                <label class="inline-flex items-center opacity-50 cursor-not-allowed" title="暂不支持">
+                <label class="inline-flex items-center">
                   <input
                     v-model="form.alloc_method"
                     type="radio"
                     value="chain_at_cost"
                     class="form-radio text-primary-600"
-                    disabled
                   />
-                  <span class="ml-2">链子按原价，剩余给主件（开发中）</span>
+                  <span class="ml-2">链子按原价，剩余给主件</span>
                 </label>
               </div>
               <p class="mt-1 text-xs text-gray-500" v-if="form.alloc_method === 'by_ratio'">
                 各件成交价 = (该件售价 / 总售价) × 套装总价
+              </p>
+              <p class="mt-1 text-xs text-gray-500" v-if="form.alloc_method === 'chain_at_cost'">
+                链子/绳子类货品按原价计入，剩余金额全部分配给主件。请在上方货品列表中勾选链子。
+              </p>
+              <!-- chain_at_cost 校验提示 -->
+              <p v-if="form.alloc_method === 'chain_at_cost' && mainItemCount === 0" class="mt-1 text-xs text-red-600">
+                至少需要保留1件主件（不能全部标记为链子）
               </p>
             </div>
 

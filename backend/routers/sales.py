@@ -274,11 +274,19 @@ def create_bundle_sale(
     body: BundleSaleCreate,
     db: Session = Depends(get_db),
 ) -> ApiResponse[BundleSaleOut]:
-    # 1. 校验分摊方法（目前只支持 by_ratio）
-    if body.alloc_method != "by_ratio":
+    # 1. 校验分摊方法
+    valid_methods = {"by_ratio", "chain_at_cost"}
+    if body.alloc_method not in valid_methods:
         raise HTTPException(
             status_code=400,
-            detail=f"暂不支持的分摊方法「{body.alloc_method}」，目前仅支持 by_ratio",
+            detail=f"不支持的分摊方法「{body.alloc_method}」，允许值：{sorted(valid_methods)}",
+        )
+
+    # chain_at_cost 必须提供 chain_items 标记
+    if body.alloc_method == "chain_at_cost" and body.chain_items is None:
+        raise HTTPException(
+            status_code=400,
+            detail="chain_at_cost 分摊方法必须提供 chain_items 字段，标记哪些货品是链子类",
         )
 
     # 2. 校验渠道合法性
@@ -315,19 +323,63 @@ def create_bundle_sale(
     # 4. 生成套装编号
     bundle_no = _generate_bundle_no(body.sale_date, db)
 
-    # 5. 计算分摊价格（by_ratio）
-    total_selling_price = sum(item.selling_price for item in items)
-    if total_selling_price == 0:
-        raise HTTPException(
-            status_code=400,
-            detail="所有货品零售价总和为0，无法按比例分摊",
+    # 5. 计算分摊价格
+    allocated_prices = []
+
+    if body.alloc_method == "by_ratio":
+        # ── by_ratio: 按零售价比例分摊 ──
+        total_selling_price = sum(item.selling_price for item in items)
+        if total_selling_price == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="所有货品零售价总和为0，无法按比例分摊",
+            )
+        for item in items:
+            ratio = item.selling_price / total_selling_price
+            allocated_price = round(body.total_price * ratio, 2)
+            allocated_prices.append(allocated_price)
+
+    elif body.alloc_method == "chain_at_cost":
+        # ── chain_at_cost: 链子按 selling_price，剩余给主件 ──
+        chain_flags = body.chain_items
+        if len(chain_flags) != len(items):
+            raise HTTPException(
+                status_code=400,
+                detail=f"chain_items 长度({len(chain_flags)})与 item_ids 长度({len(items)})不一致",
+            )
+
+        # 链子类货品的 selling_price 总和
+        chain_cost = sum(
+            item.selling_price for item, is_chain in zip(items, chain_flags) if is_chain
         )
 
-    allocated_prices = []
-    for item in items:
-        ratio = item.selling_price / total_selling_price
-        allocated_price = round(body.total_price * ratio, 2)
-        allocated_prices.append(allocated_price)
+        # 校验总价 >= 链子类 selling_price 总和
+        if body.total_price < chain_cost:
+            raise HTTPException(
+                status_code=400,
+                detail=f"套装总价({body.total_price})小于链子类零售价总和({chain_cost})，无法分摊",
+            )
+
+        # 如果没有标记为链子的，第一件为主件，其余为链子
+        if not any(chain_flags):
+            chain_flags = [False] + [True] * (len(chain_flags) - 1)
+            chain_cost = sum(
+                item.selling_price for item, is_chain in zip(items, chain_flags) if is_chain
+            )
+            if body.total_price < chain_cost:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"套装总价({body.total_price})小于链子类零售价总和({chain_cost})，无法分摊",
+                )
+
+        # 主件 = 总价 - 链子类 selling_price 总和（精度由主件吸收）
+        main_price = round(body.total_price - chain_cost, 2)
+
+        for item, is_chain in zip(items, chain_flags):
+            if is_chain:
+                allocated_prices.append(item.selling_price)
+            else:
+                allocated_prices.append(main_price)
 
     # 6. 在同一事务中创建套装记录 + 各件销售记录 + 更新货品状态
     bundle = BundleSale(

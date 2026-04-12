@@ -104,18 +104,13 @@ const showSpecFields = computed(() => specFields.value.length > 0)
 // 获取字典数据（使用缓存）
 async function fetchDicts() {
   try {
-    console.log('开始获取字典数据...')
     // 获取材质（带缓存）
     const materialsData = await dictStore.loadMaterials()
-    console.log('材质数据加载成功:', materialsData.length, '条')
     // 获取标签（带缓存）
     const tagsData = await dictStore.loadTags()
-    console.log('标签数据加载成功:', tagsData.length, '条')
     // 获取供应商
     const suppliersData = await api.suppliers.getSuppliers()
     suppliers.value = suppliersData
-    console.log('供应商数据加载成功:', suppliersData.length, '条')
-    console.log('字典数据获取完成')
     return { materialsData, tagsData, suppliersData }
   } catch (error) {
     console.error('获取字典数据失败:', error)
@@ -437,7 +432,6 @@ const tagGroups = computed(() => {
 })
 
 onMounted(async () => {
-  console.log('InventoryAdd组件挂载，模式:', mode.value, '编辑模式:', isEditMode.value)
   try {
     await fetchDicts()
     // 设置默认值（非编辑模式）
@@ -451,7 +445,6 @@ onMounted(async () => {
       mode.value = 'single' // 编辑模式固定为单件
       await loadItem()
     }
-    console.log('组件初始化完成')
   } catch (error) {
     console.error('组件初始化失败:', error)
   }

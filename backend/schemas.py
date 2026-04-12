@@ -225,6 +225,13 @@ class CustomerOut(BaseModel):
     created_at: datetime.datetime
 
 
+class CustomerListOut(BaseModel):
+    """客户分页列表响应体"""
+
+    items: List[CustomerOut]
+    pagination: PaginationMeta
+
+
 class CustomerDetailOut(CustomerOut):
     """客户详情响应体（含关联购买记录）"""
 
@@ -356,6 +363,7 @@ class ItemImageOut(BaseModel):
     id: int
     item_id: int
     filename: str
+    thumbnail_path: Optional[str] = Field(default=None, description="缩略图文件名")
     is_cover: bool
     created_at: datetime.datetime
 
@@ -564,6 +572,11 @@ class BundleSaleCreate(BaseModel):
     sale_date: datetime.date = Field(description="销售日期")
     customer_id: Optional[int] = Field(default=None, description="客户ID")
     note: Optional[str] = Field(default=None, description="备注")
+    chain_items: Optional[List[bool]] = Field(
+        default=None,
+        description="标记哪些货品是链子/绳子类（仅 chain_at_cost 分摊时使用）。"
+                    "长度须与 item_ids 一致，True 表示该件为链子类。",
+    )
 
 
 class BundleSaleOut(BaseModel):

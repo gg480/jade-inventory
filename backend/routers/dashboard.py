@@ -14,7 +14,8 @@ from sqlalchemy import and_, func
 from sqlalchemy.orm import Session, selectinload
 
 from database import get_db
-from models import Batch, DictMaterial, Item, SaleRecord
+from models import Batch, DictMaterial, Item, SaleRecord, SysConfig
+from utils.batch_stats import compute_batch_stats
 from schemas import (
     ApiResponse,
     BatchProfitItem,
@@ -66,66 +67,6 @@ def _cover_filename(item: Item) -> Optional[str]:
     return item.images[0].filename if item.images else None
 
 
-def _compute_batch_stats(batch: Batch, db: Session) -> dict:
-    """
-    计算批次的统计指标（复用 batches.py 中的逻辑）。
-
-    返回：
-    - items_count: 关联货品数量（未删除）
-    - sold_count: 已售货品数量
-    - revenue: 已售货品的实际成交价总和
-    - profit: 利润 = revenue - total_cost
-    - payback_rate: 回本进度 = revenue / total_cost（0‑1）
-    - status: 批次状态（new / selling / paid_back / cleared）
-    """
-    # 关联货品（未删除）
-    items_query = db.query(Item).filter(
-        Item.batch_id == batch.id,
-        Item.is_deleted == False
-    )
-    items_count = items_query.count()
-
-    # 已售货品（通过 sale_records 关联）
-    sold_subquery = (
-        db.query(SaleRecord.item_id)
-        .join(Item, SaleRecord.item_id == Item.id)
-        .filter(Item.batch_id == batch.id, Item.is_deleted == False)
-        .subquery()
-    )
-    sold_count = db.query(func.count()).select_from(sold_subquery).scalar() or 0
-
-    # 已售回款
-    revenue_result = (
-        db.query(func.sum(SaleRecord.actual_price))
-        .join(Item, SaleRecord.item_id == Item.id)
-        .filter(Item.batch_id == batch.id, Item.is_deleted == False)
-        .scalar()
-    )
-    revenue = float(revenue_result) if revenue_result else 0.0
-
-    # 利润与回本进度
-    profit = revenue - batch.total_cost
-    payback_rate = revenue / batch.total_cost if batch.total_cost > 0 else 0.0
-
-    # 批次状态（基于回本进度和销售情况）
-    if sold_count == 0:
-        status = "new"  # 未售
-    elif payback_rate >= 1.0:
-        if sold_count >= batch.quantity:
-            status = "cleared"  # 清仓完
-        else:
-            status = "paid_back"  # 已回本
-    else:
-        status = "selling"  # 销售中
-
-    return {
-        "items_count": items_count,
-        "sold_count": sold_count,
-        "revenue": round(revenue, 2),
-        "profit": round(profit, 2),
-        "payback_rate": round(payback_rate, 4),
-        "status": status,
-    }
 
 
 # ──────────────────────────────────────────────
@@ -312,9 +253,20 @@ def sales_trend(
     description="列出在库超过指定天数的货品，按库龄降序排列，显示占用资金和柜台号。",
 )
 def stock_aging(
-    min_days: int = Query(_DEFAULT_AGING_DAYS, ge=0, description="在库天数阈值，默认 90 天"),
+    min_days: Optional[int] = Query(None, ge=0, description="在库天数阈值（不传则自动从 sys_config 读取）"),
     db: Session = Depends(get_db),
 ) -> ApiResponse[StockAgingResponse]:
+    # ── 从 sys_config 读取 aging_threshold_days，fallback 到 config.ALERT_DAYS ──
+    if min_days is None:
+        config_row = db.query(SysConfig).filter(SysConfig.key == "aging_threshold_days").first()
+        if config_row:
+            try:
+                min_days = int(config_row.value)
+            except (ValueError, TypeError):
+                min_days = _DEFAULT_AGING_DAYS
+        else:
+            min_days = _DEFAULT_AGING_DAYS
+
     today = datetime.date.today()
 
     # 查询所有在库货品
@@ -473,7 +425,7 @@ def get_batch_profit(
 
     result = []
     for batch in batches:
-        stats = _compute_batch_stats(batch, db)
+        stats = compute_batch_stats(batch, db)
 
         # 按状态筛选（如果提供了 status 参数）
         if status is not None and stats["status"] != status:

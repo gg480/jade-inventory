@@ -5,7 +5,7 @@ import MaterialModal from '../components/MaterialModal.vue'
 import TypeModal from '../components/TypeModal.vue'
 import TagModal from '../components/TagModal.vue'
 
-const activeTab = ref('materials') // materials, types, tags
+const activeTab = ref('materials') // materials, types, tags, config
 const loading = ref(false)
 
 // 材质相关
@@ -33,6 +33,19 @@ const tagGroups = ref({})
 const collapsedGroups = ref([])
 const newTag = ref({ name: '', group_name: '', description: '' })
 
+// 系统配置相关
+const configList = ref([])
+const editingConfigKey = ref(null)
+const editingConfigValue = ref('')
+const configSaving = ref(false)
+const configLoading = ref(false)
+const configNameMap = {
+  operating_cost_rate: '经营成本率',
+  markup_rate: '零售价上浮比例',
+  aging_threshold_days: '压货预警天数',
+  default_alloc_method: '默认分摊算法'
+}
+
 // 获取字典数据
 async function fetchDicts() {
   loading.value = true
@@ -47,6 +60,9 @@ async function fetchDicts() {
       // 获取所有标签（包含已停用的）
       tags.value = await api.dicts.getTags(null, true)
       groupTags()
+    } else if (activeTab.value === 'config') {
+      // 获取系统配置
+      await fetchConfig()
     }
   } catch (error) {
     console.error('获取字典数据失败:', error)
@@ -194,48 +210,6 @@ function getSpecFieldLabel(field) {
   return map[field] || field
 }
 
-// 添加新器型（保持兼容性，稍后移除）
-
-// 删除器型（已废弃，使用toggleTypeStatus替代）
-// async function deleteType(id, name) {
-//   if (!confirm(`确定要删除器型 "${name}" 吗？`)) return
-//   try {
-//     await api.dicts.deleteType(id)
-//     alert('删除成功')
-//     fetchDicts()
-//   } catch (error) {
-//     alert(`删除失败: ${error.message}`)
-//   }
-// }
-
-// 添加新标签（已废弃，使用openAddTagModal替代）
-// async function addTag() {
-//   if (!newTag.value.name.trim()) {
-//     alert('请输入标签名称')
-//     return
-//   }
-//   try {
-//     await api.dicts.createTag(newTag.value)
-//     alert('添加成功')
-//     newTag.value = { name: '', group_name: '', description: '' }
-//     fetchDicts()
-//   } catch (error) {
-//     alert(`添加失败: ${error.message}`)
-//   }
-// }
-//
-// // 删除标签（已废弃，使用toggleTagStatus替代）
-// async function deleteTag(id, name) {
-//   if (!confirm(`确定要删除标签 "${name}" 吗？`)) return
-//   try {
-//     await api.dicts.deleteTag(id)
-//     alert('删除成功')
-//     fetchDicts()
-//   } catch (error) {
-//     alert(`删除失败: ${error.message}`)
-//   }
-// }
-
 // 标签分组
 function groupTags() {
   const groups = {}
@@ -328,7 +302,60 @@ async function toggleTagStatus(tag) {
   }
 }
 
-// 添加新标签（保持兼容性，稍后移除）
+// 获取系统配置
+async function fetchConfig() {
+  configLoading.value = true
+  try {
+    const data = await api.dicts.getConfig()
+    // 后端返回数组或对象，统一转为数组
+    if (Array.isArray(data)) {
+      configList.value = data
+    } else if (data && typeof data === 'object') {
+      configList.value = Object.entries(data).map(([key, value]) => ({ key, value }))
+    } else {
+      configList.value = []
+    }
+  } catch (error) {
+    console.error('获取系统配置失败:', error)
+    alert('获取系统配置失败')
+  } finally {
+    configLoading.value = false
+  }
+}
+
+// 开始编辑配置
+function startEditConfig(config) {
+  editingConfigKey.value = config.key
+  editingConfigValue.value = String(config.value || '')
+}
+
+// 取消编辑配置
+function cancelEditConfig() {
+  editingConfigKey.value = null
+  editingConfigValue.value = ''
+}
+
+// 保存配置
+async function saveConfig() {
+  if (!editingConfigKey.value) return
+  configSaving.value = true
+  try {
+    await api.dicts.updateConfig(editingConfigKey.value, editingConfigValue.value)
+    alert('保存成功')
+    editingConfigKey.value = null
+    editingConfigValue.value = ''
+    await fetchConfig()
+  } catch (error) {
+    console.error('保存配置失败:', error)
+  } finally {
+    configSaving.value = false
+  }
+}
+
+// 获取配置项中文名称
+function getConfigName(key) {
+  return configNameMap[key] || key
+}
 
 onMounted(() => {
   fetchDicts()
@@ -379,6 +406,17 @@ onMounted(() => {
             ]"
           >
             标签管理
+          </button>
+          <button
+            @click="activeTab = 'config'; fetchDicts()"
+            :class="[
+              'ml-8 px-4 py-3 text-sm font-medium border-b-2 transition-colors',
+              activeTab === 'config'
+                ? 'border-primary-500 text-primary-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            ]"
+          >
+            系统配置
           </button>
         </nav>
       </div>
@@ -737,6 +775,73 @@ onMounted(() => {
         @submit="handleTagSubmit"
         @cancel="showTagModal = false"
       />
+    </div>
+
+    <!-- 系统配置 -->
+    <div v-if="activeTab === 'config'" class="space-y-6">
+      <div class="card">
+        <h2 class="text-lg font-semibold text-gray-900">系统配置</h2>
+        <p class="mt-1 text-sm text-gray-500">管理系统参数，如成本率、预警天数等</p>
+      </div>
+
+      <div class="card">
+        <div v-if="configLoading" class="text-center py-12">
+          <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+          <p class="mt-2 text-gray-500">加载中...</p>
+        </div>
+        <div v-else-if="configList.length === 0" class="text-center py-12">
+          <div class="text-gray-400 text-5xl mb-4">⚙️</div>
+          <h3 class="text-lg font-medium text-gray-900 mb-1">暂无配置数据</h3>
+        </div>
+        <div v-else>
+          <div class="table-container">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th class="w-48">配置项名称</th>
+                  <th class="w-56">配置 Key</th>
+                  <th>当前值</th>
+                  <th class="w-32">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="config in configList" :key="config.key">
+                  <td class="font-medium">{{ getConfigName(config.key) }}</td>
+                  <td>
+                    <code class="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded">{{ config.key }}</code>
+                  </td>
+                  <td>
+                    <div v-if="editingConfigKey === config.key">
+                      <input
+                        v-model="editingConfigValue"
+                        type="text"
+                        class="form-input w-48"
+                        @keyup.enter="saveConfig"
+                        @keyup.escape="cancelEditConfig"
+                        :disabled="configSaving"
+                      />
+                    </div>
+                    <span v-else class="text-gray-900">{{ config.value }}</span>
+                  </td>
+                  <td>
+                    <div v-if="editingConfigKey === config.key" class="flex space-x-2">
+                      <button @click="saveConfig" class="btn btn-sm btn-success" :disabled="configSaving">
+                        {{ configSaving ? '保存中...' : '保存' }}
+                      </button>
+                      <button @click="cancelEditConfig" class="btn btn-sm btn-secondary" :disabled="configSaving">
+                        取消
+                      </button>
+                    </div>
+                    <button v-else @click="startEditConfig(config)" class="btn btn-sm btn-secondary">
+                      编辑
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>

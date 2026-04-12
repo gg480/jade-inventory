@@ -11,6 +11,8 @@ const DictManage = () => import('../views/DictsManagement.vue') // 实际文件�
 const MetalPriceManage = () => import('../views/MetalPriceManage.vue')
 const CustomerList = () => import('../views/CustomerList.vue')
 const SuppliersManagement = () => import('../views/SuppliersManagement.vue')
+const BatchList = () => import('../views/BatchList.vue')
+const NotFound = () => import('../views/NotFound.vue')
 
 const routes = [
   {
@@ -22,6 +24,12 @@ const routes = [
     name: 'inventory',
     component: InventoryList,
     meta: { title: '库存列表' }
+  },
+  {
+    path: '/batches',
+    name: 'batch-list',
+    component: BatchList,
+    meta: { title: '批次列表' }
   },
   {
     path: '/inventory/add',
@@ -85,6 +93,12 @@ const routes = [
     component: SuppliersManagement,
     meta: { title: '供货商管理' }
   },
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'not-found',
+    component: NotFound,
+    meta: { title: '页面不存在' }
+  },
 ]
 
 const router = createRouter({
@@ -94,7 +108,6 @@ const router = createRouter({
 
 // 全局前置守卫：设置页面标题
 router.beforeEach((to, from, next) => {
-  console.log(`路由切换: ${from.path} -> ${to.path}`)
   document.title = to.meta.title ? `${to.meta.title} - 玉器店进销存` : '玉器店进销存'
   next()
 })

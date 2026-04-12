@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from database import get_db
 from models import Batch, DictMaterial, Item, SaleRecord
+from utils.batch_stats import compute_batch_stats
 from schemas import DictTagOut, ItemImageOut, ItemSpecOut
 
 router = APIRouter(prefix="/export", tags=["数据导出"])
@@ -261,37 +262,12 @@ def export_batches(
 
     row_idx = 2
     for batch in batches:
-        # 复用 dashboard.py 中的批次统计逻辑
-        items_query = db.query(Item).filter(
-            Item.batch_id == batch.id, Item.is_deleted == False
-        )
-        items_count = items_query.count()
-
-        sold_subquery = (
-            db.query(SaleRecord.item_id)
-            .join(Item, SaleRecord.item_id == Item.id)
-            .filter(Item.batch_id == batch.id, Item.is_deleted == False)
-            .subquery()
-        )
-        sold_count = db.query(func.count()).select_from(sold_subquery).scalar() or 0
-
-        revenue_result = (
-            db.query(func.sum(SaleRecord.actual_price))
-            .join(Item, SaleRecord.item_id == Item.id)
-            .filter(Item.batch_id == batch.id, Item.is_deleted == False)
-            .scalar()
-        )
-        revenue = float(revenue_result) if revenue_result else 0.0
-
-        profit = revenue - batch.total_cost
-        payback_rate = revenue / batch.total_cost if batch.total_cost > 0 else 0.0
-
-        if sold_count == 0:
-            batch_status = "new"
-        elif payback_rate >= 1.0:
-            batch_status = "cleared" if sold_count >= batch.quantity else "paid_back"
-        else:
-            batch_status = "selling"
+        stats = compute_batch_stats(batch, db)
+        sold_count = stats["sold_count"]
+        revenue = stats["revenue"]
+        profit = stats["profit"]
+        payback_rate = stats["payback_rate"]
+        batch_status = stats["status"]
 
         # 按状态筛选
         if status is not None and batch_status != status:
@@ -303,8 +279,8 @@ def export_batches(
             round(batch.total_cost, 2),
             batch.quantity,
             sold_count,
-            round(revenue, 2),
-            round(profit, 2),
+            revenue,
+            profit,
             round(payback_rate * 100, 1),
             _BATCH_STATUS_MAP.get(batch_status, batch_status),
         ])

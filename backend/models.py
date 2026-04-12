@@ -306,6 +306,7 @@ class ItemImage(Base):
         Integer, ForeignKey("items.id", ondelete="CASCADE"), nullable=False
     )
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    thumbnail_path: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     is_cover: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, default=func.now(), nullable=False

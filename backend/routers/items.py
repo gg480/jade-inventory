@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
+from PIL import Image
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
@@ -37,6 +38,54 @@ router = APIRouter(prefix="/items", tags=["货品管理"])
 
 # 允许通过编辑接口设置的状态（sold 只能由销售接口触发）
 _EDITABLE_STATUS = {"in_stock", "lent_out", "returned"}
+
+# ── Magic Number 校验表：扩展名 → 文件头字节 ──
+_MAGIC_SIGNATURES = {
+    ".jpg":  b"\xff\xd8\xff",
+    ".jpeg": b"\xff\xd8\xff",
+    ".png":  b"\x89PNG",
+    ".gif":  b"GIF8",
+    ".webp": None,  # WebP 需要特殊处理（RIFF....WEBP）
+}
+
+
+def _validate_image_magic(content: bytes, ext: str, filename: str) -> None:
+    """通过 Magic Number 校验文件内容是否与扩展名一致。"""
+    if ext == ".webp":
+        # WebP: 前 4 字节为 'RIFF'，偏移 8 处 4 字节为 'WEBP'
+        if len(content) < 12:
+            raise HTTPException(
+                status_code=400,
+                detail=f"文件「{filename}」内容过短，无法识别为 WebP 格式",
+            )
+        if content[:4] != b"RIFF" or content[8:12] != b"WEBP":
+            raise HTTPException(
+                status_code=400,
+                detail=f"文件「{filename}」内容与 WebP 格式的 Magic Number 不匹配",
+            )
+        return
+
+    expected = _MAGIC_SIGNATURES.get(ext)
+    if expected is not None and not content.startswith(expected):
+        raise HTTPException(
+            status_code=400,
+            detail=f"文件「{filename}」扩展名为{ext}，但文件头与{ext.upper()}格式不匹配，请检查文件内容",
+        )
+
+
+def _generate_thumbnail(file_path: Path, ext: str) -> str:
+    """生成 400×400 JPEG 缩略图，返回缩略图文件名。"""
+    thumb_name = file_path.stem + "_thumb.jpg"
+    thumb_path = file_path.parent / thumb_name
+
+    with Image.open(file_path) as img:
+        img.thumbnail((400, 400))
+        # 如果有透明通道，转为 RGB
+        if img.mode in ("RGBA", "P", "LA"):
+            img = img.convert("RGB")
+        img.save(thumb_path, "JPEG", quality=85)
+
+    return thumb_name
 
 
 # ──────────────────────────────────────────────
@@ -643,6 +692,9 @@ async def upload_images(
                 detail=f"文件「{file.filename}」超过 {max_mb:.0f}MB 限制",
             )
 
+        # ── Task 3: Magic Number 校验（文件内容与扩展名是否匹配）──
+        _validate_image_magic(content, ext, file.filename or "unknown")
+
         # 生成唯一文件名
         unique_name = f"{item_id}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}{ext}"
         file_path = IMAGE_DIR / unique_name
@@ -651,11 +703,19 @@ async def upload_images(
         with open(file_path, "wb") as f:
             f.write(content)
 
+        # ── Task 2: 生成 400×400 缩略图 ──
+        thumbnail_name = None
+        try:
+            thumbnail_name = _generate_thumbnail(file_path, ext)
+        except Exception:
+            pass  # 缩略图生成失败不阻断主流程
+
         # 第一张图片自动设为封面
         is_cover = (existing_count == 0 and i == 0)
         img_record = ItemImage(
             item_id=item_id,
             filename=unique_name,
+            thumbnail_path=thumbnail_name,
             is_cover=is_cover,
         )
         db.add(img_record)

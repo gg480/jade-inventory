@@ -220,16 +220,7 @@ onMounted(() => {
         <div class="text-2xl font-bold text-jade-600 mt-1">¥{{ summary.month_revenue.toFixed(2) }}</div>
         <div class="text-xs text-gray-500 mt-1">{{ summary.month_sold_count }} 件，毛利 ¥{{ summary.month_profit.toFixed(2) }}</div>
       </div>
-      <div class="card text-center">
-        <div class="text-sm text-gray-500">在库货品</div>
-        <div class="text-2xl font-bold text-blue-600 mt-1">{{ summary.total_items }}</div>
-        <div class="text-xs text-gray-500 mt-1">占用资金 ¥{{ summary.total_stock_value.toFixed(2) }}</div>
-      </div>
-      <div class="card text-center">
-        <div class="text-sm text-gray-500">本月销售</div>
-        <div class="text-2xl font-bold text-red-600 mt-1">{{ summary.month_sold_count }} 件</div>
-        <div class="text-xs text-gray-500 mt-1">毛利 ¥{{ summary.month_profit.toFixed(2) }}</div>
-      </div>
+
     </div>
 
     <!-- 按品类利润 -->

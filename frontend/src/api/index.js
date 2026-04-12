@@ -116,8 +116,8 @@ const dicts = {
   deleteTag: (id) => api.delete(`/dicts/tags/${id}`),
 
   // 系统配置
-  getConfig: (key) => api.get('/dicts/config', { params: { key } }),
-  updateConfig: (key, value) => api.put('/dicts/config', { key, value }),
+  getConfig: () => api.get('/config'),
+  updateConfig: (key, value) => api.put(`/config/${key}`, { value }),
 }
 
 const batches = {

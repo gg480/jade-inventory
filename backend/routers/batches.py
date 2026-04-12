@@ -15,6 +15,7 @@ from sqlalchemy import func
 
 from database import get_db
 from models import Batch, DictMaterial, DictType, Supplier, Item, SaleRecord, SysConfig
+from utils.batch_stats import compute_batch_stats
 from schemas import (
     ApiResponse,
     BatchCreate,
@@ -70,69 +71,9 @@ def _get_config_value(db: Session, key: str, default: float = 0.0) -> float:
         return default
 
 
-def _compute_batch_stats(batch: Batch, db: Session) -> dict:
-    """
-    计算批次的统计指标：
-    - items_count: 关联货品数量（未删除）
-    - sold_count: 已售货品数量
-    - revenue: 已售货品的实际成交价总和
-    - profit: 利润 = revenue - total_cost（注意：分母是批次总进价）
-    - payback_rate: 回本进度 = revenue / total_cost（0‑1）
-    - status: 批次状态（new / selling / paid_back / cleared）
-    """
-    # 关联货品（未删除）
-    items_query = db.query(Item).filter(
-        Item.batch_id == batch.id,
-        Item.is_deleted == False
-    )
-    items_count = items_query.count()
-
-    # 已售货品（通过 sale_records 关联）
-    sold_subquery = (
-        db.query(SaleRecord.item_id)
-        .join(Item, SaleRecord.item_id == Item.id)
-        .filter(Item.batch_id == batch.id, Item.is_deleted == False)
-        .subquery()
-    )
-    sold_count = db.query(func.count()).select_from(sold_subquery).scalar() or 0
-
-    # 已售回款
-    revenue_result = (
-        db.query(func.sum(SaleRecord.actual_price))
-        .join(Item, SaleRecord.item_id == Item.id)
-        .filter(Item.batch_id == batch.id, Item.is_deleted == False)
-        .scalar()
-    )
-    revenue = float(revenue_result) if revenue_result else 0.0
-
-    # 利润与回本进度
-    profit = revenue - batch.total_cost
-    payback_rate = revenue / batch.total_cost if batch.total_cost > 0 else 0.0
-
-    # 批次状态（基于回本进度和销售情况）
-    if sold_count == 0:
-        status = "new"  # 未售
-    elif payback_rate >= 1.0:
-        if sold_count >= batch.quantity:
-            status = "cleared"  # 清仓完
-        else:
-            status = "paid_back"  # 已回本
-    else:
-        status = "selling"  # 销售中
-
-    return {
-        "items_count": items_count,
-        "sold_count": sold_count,
-        "revenue": round(revenue, 2),
-        "profit": round(profit, 2),
-        "payback_rate": round(payback_rate, 4),
-        "status": status,
-    }
-
-
 def _to_batch_out(batch: Batch, db: Session) -> BatchOut:
     """将 ORM Batch 对象转换为 BatchOut（含统计字段）。"""
-    stats = _compute_batch_stats(batch, db)
+    stats = compute_batch_stats(batch, db)
     return BatchOut(
         id=batch.id,
         batch_code=batch.batch_code,
