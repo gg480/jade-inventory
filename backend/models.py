@@ -152,6 +152,9 @@ class Batch(Base):
 
     __tablename__ = "batches"
 
+    def __repr__(self) -> str:
+        return f"<Batch id={self.id} code={self.batch_code!r}>"
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     batch_code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     material_id: Mapped[int] = mapped_column(
@@ -191,6 +194,9 @@ class Item(Base):
         Index("ix_items_material", "material_id"),
         Index("ix_items_batch", "batch_id"),
     )
+
+    def __repr__(self) -> str:
+        return f"<Item id={self.id} sku={self.sku_code!r}>"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     sku_code: Mapped[str] = mapped_column(
@@ -320,6 +326,9 @@ class SaleRecord(Base):
         Index("ix_sale_date", "sale_date"),
         Index("ix_sale_channel", "channel"),
     )
+
+    def __repr__(self) -> str:
+        return f"<SaleRecord id={self.id} no={self.sale_no!r}>"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     sale_no: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)

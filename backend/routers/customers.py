@@ -81,6 +81,8 @@ def list_customers(
     phone: Optional[str] = Query(None, description="按电话搜索（精确匹配）"),
     wechat: Optional[str] = Query(None, description="按微信号搜索（精确匹配）"),
     include_inactive: bool = Query(False, description="是否包含已停用的客户"),
+    page: int = Query(1, ge=1, description="页码"),
+    size: int = Query(100, ge=1, le=500, description="每页条数"),
     db: Session = Depends(get_db),
 ) -> ApiResponse[List[CustomerOut]]:
     q = db.query(Customer)
@@ -95,7 +97,13 @@ def list_customers(
     if not include_inactive:
         q = q.filter(Customer.is_active == True)
 
-    customers = q.order_by(desc(Customer.created_at), Customer.id).all()
+    total = q.count()
+    customers = (
+        q.order_by(desc(Customer.created_at), Customer.id)
+        .offset((page - 1) * size)
+        .limit(size)
+        .all()
+    )
     return ApiResponse(data=[CustomerOut.model_validate(c) for c in customers])
 
 
@@ -118,7 +126,7 @@ def create_customer(
     if db.query(Customer).filter(Customer.name == body.name).first():
         raise HTTPException(
             status_code=400,
-            detail={"code": 400, "message": f"客户「{body.name}」已存在"}
+            detail=f"客户「{body.name}」已存在"
         )
 
     # 生成客户编号
@@ -162,7 +170,7 @@ def update_customer(
         if db.query(Customer).filter(Customer.name == body.name).first():
             raise HTTPException(
                 status_code=400,
-                detail={"code": 400, "message": f"客户「{body.name}」已存在"}
+                detail=f"客户「{body.name}」已存在"
             )
         customer.name = body.name
 
@@ -218,11 +226,11 @@ def get_customer_detail(
         record.item_name = sale.item.name if sale.item else None
         record.customer_name = customer.name
 
-        # 计算毛利（实际成交价 - 分摊成本）
-        allocated_cost = sale.item.allocated_cost if sale.item else 0
-        if allocated_cost is None:
-            allocated_cost = 0
-        record.gross_profit = sale.actual_price - allocated_cost
+        # 计算毛利（实际成交价 - 成本）
+        cost = sale.item.allocated_cost if sale.item and sale.item.allocated_cost is not None else (sale.item.cost_price if sale.item else 0)
+        if cost is None:
+            cost = 0
+        record.gross_profit = round(sale.actual_price - cost, 2)
 
         purchase_records.append(record)
 

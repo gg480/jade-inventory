@@ -156,7 +156,7 @@ def profit_by_category(
             DictMaterial.name.label("material_name"),
             func.count(SaleRecord.id).label("sales_count"),
             func.sum(SaleRecord.actual_price).label("total_revenue"),
-            func.sum(Item.cost_price).label("total_cost"),
+            func.sum(func.coalesce(Item.allocated_cost, Item.cost_price, 0.0)).label("total_cost"),
         )
         .join(Item, SaleRecord.item_id == Item.id)
         .join(DictMaterial, Item.material_id == DictMaterial.id)
@@ -211,7 +211,7 @@ def profit_by_channel(
             SaleRecord.channel,
             func.count(SaleRecord.id).label("sales_count"),
             func.sum(SaleRecord.actual_price).label("total_revenue"),
-            func.sum(Item.cost_price).label("total_cost"),
+            func.sum(func.coalesce(Item.allocated_cost, Item.cost_price, 0.0)).label("total_cost"),
         )
         .join(Item, SaleRecord.item_id == Item.id)
         .filter(*date_filters)
@@ -268,7 +268,7 @@ def sales_trend(
             year_month_expr,
             func.count(SaleRecord.id).label("sales_count"),
             func.sum(SaleRecord.actual_price).label("total_revenue"),
-            func.sum(SaleRecord.actual_price - Item.cost_price).label("gross_profit"),
+            func.sum(SaleRecord.actual_price - func.coalesce(Item.allocated_cost, Item.cost_price, 0.0)).label("gross_profit"),
         )
         .join(Item, SaleRecord.item_id == Item.id)
         .filter(*filters)
@@ -322,7 +322,7 @@ def stock_aging(
         db.query(Item)
         .options(
             selectinload(Item.material),
-            selectinload(Item.item_type),
+            selectinload(Item.type),
             selectinload(Item.images),
         )
         .filter(Item.status == "in_stock", Item.is_deleted == False)
@@ -347,7 +347,7 @@ def stock_aging(
                     name=item.name,
                     batch_code=item.batch_code,
                     material_name=item.material.name,
-                    type_name=item.item_type.name if item.item_type else None,
+                    type_name=item.type.name if item.type else None,
                     cost_price=item.cost_price,
                     allocated_cost=item.allocated_cost,
                     selling_price=item.selling_price,

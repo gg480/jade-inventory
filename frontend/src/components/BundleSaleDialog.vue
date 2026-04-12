@@ -261,14 +261,15 @@ onMounted(() => {
                   />
                   <span class="ml-2">按售价比例分摊</span>
                 </label>
-                <label class="inline-flex items-center">
+                <label class="inline-flex items-center opacity-50 cursor-not-allowed" title="暂不支持">
                   <input
                     v-model="form.alloc_method"
                     type="radio"
                     value="chain_at_cost"
                     class="form-radio text-primary-600"
+                    disabled
                   />
-                  <span class="ml-2">链子按原价，剩余给主件</span>
+                  <span class="ml-2">链子按原价，剩余给主件（开发中）</span>
                 </label>
               </div>
               <p class="mt-1 text-xs text-gray-500" v-if="form.alloc_method === 'by_ratio'">

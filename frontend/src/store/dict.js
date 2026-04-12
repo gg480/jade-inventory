@@ -5,12 +5,14 @@ import api from '../api'
 const materials = ref([])
 const tags = ref([])
 const typesByMaterial = ref({}) // { materialId: types[] }
+const types = ref([])
 const loading = ref(false)
 
 // 标志是否已加载
 const loaded = {
   materials: false,
   tags: false,
+  types: false,
 }
 
 /**
@@ -53,6 +55,29 @@ async function loadTags(forceRefresh = false) {
     return data
   } catch (error) {
     console.error('加载标签失败:', error)
+    throw error
+  } finally {
+    loading.value = false
+  }
+}
+
+/**
+ * 获取所有器型列表（不带材质筛选，带缓存）
+ * @param {boolean} forceRefresh 强制刷新
+ * @returns {Promise<Array>}
+ */
+async function loadTypes(forceRefresh = false) {
+  if (loaded.types && !forceRefresh && types.value.length > 0) {
+    return types.value
+  }
+  try {
+    loading.value = true
+    const data = await api.dicts.getTypes()
+    types.value = data
+    loaded.types = true
+    return data
+  } catch (error) {
+    console.error('加载器型失败:', error)
     throw error
   } finally {
     loading.value = false
@@ -193,11 +218,13 @@ export function useDictStore() {
     // 状态
     materials,
     tags,
+    types,
     typesByMaterial,
     loading,
     // 加载方法
     loadMaterials,
     loadTags,
+    loadTypes,
     loadTypesByMaterial,
     // 缓存管理
     clearMaterialsCache,

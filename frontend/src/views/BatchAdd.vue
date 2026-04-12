@@ -534,9 +534,15 @@ async function loadSelectData() {
     // 加载标签
     tags.value = await dictStore.loadTags()
 
-    // 加载供应商
-    const supplierData = await api.suppliers.getSuppliers()
-    suppliers.value = supplierData
+    // 加载供应商（处理分页响应）
+    const supplierData = await api.suppliers.getSuppliers({ size: 999 })
+    if (Array.isArray(supplierData)) {
+      suppliers.value = supplierData
+    } else if (supplierData && supplierData.items) {
+      suppliers.value = supplierData.items
+    } else {
+      suppliers.value = []
+    }
 
     // 设置默认日期为今天
     if (!form.purchase_date) {
@@ -557,7 +563,7 @@ async function onMaterialChange() {
     return
   }
   try {
-    types.value = await dictStore.loadTypesByMaterial(materialId)
+    types.value = await dictStore.loadTypes()
     // 如果批次已选择器型，更新规格字段
     if (form.type_id) {
       await updateBatchSpecFields(form.type_id)
@@ -751,10 +757,13 @@ async function loadAllocationResult() {
     const batchDetail = await api.batches.getBatch(batchId.value)
 
     // 获取该批次的所有货品
-    const itemsResponse = await api.items.getItems({ batch_id: batchId.value })
+    const itemsResponse = await api.items.getItems({ batch_id: batchId.value, size: 999 })
+
+    // itemsResponse 是分页对象 { items: [...], pagination: {...} }
+    const itemsList = Array.isArray(itemsResponse) ? itemsResponse : (itemsResponse.items || [])
 
     // 计算毛利率
-    allocationResult.value = itemsResponse.map(item => {
+    allocationResult.value = itemsList.map(item => {
       const profitMargin = item.allocated_cost && item.selling_price
         ? (item.selling_price - item.allocated_cost) / item.selling_price
         : 0

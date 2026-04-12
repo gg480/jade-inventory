@@ -77,10 +77,13 @@ def _generate_bundle_no(sale_date: datetime.date, db: Session) -> str:
         BundleSale.bundle_no.like(pattern)
     ).order_by(BundleSale.bundle_no.desc()).first()
     if last_no:
-        last_seq = int(last_no[0][-3:])  # 提取最后三位
+        seq_str = last_no[0][len(f"b{date_prefix}"):]
+        last_seq = int(seq_str) if seq_str.isdigit() else 0
         next_seq = last_seq + 1
     else:
         next_seq = 1
+    if next_seq > 9999:
+        raise HTTPException(status_code=500, detail="当日套装编号已超过9999上限")
     return f"b{date_prefix}{next_seq:03d}"
 
 
@@ -221,10 +224,14 @@ def create_sale(
         SaleRecord.sale_no.like(pattern)
     ).order_by(SaleRecord.sale_no.desc()).first()
     if last_no:
-        last_seq = int(last_no[0][-3:])  # 提取最后三位
+        # 支持动态位数：先去掉日期前缀，取剩余数字部分
+        seq_str = last_no[0][len(f"s{date_prefix}"):]
+        last_seq = int(seq_str) if seq_str.isdigit() else 0
         next_seq = last_seq + 1
     else:
         next_seq = 1
+    if next_seq > 9999:
+        raise HTTPException(status_code=500, detail="当日销售编号已超过9999上限")
     sale_no = f"s{date_prefix}{next_seq:03d}"
 
     # 5. 在同一事务中创建销售记录 + 更新货品状态
@@ -344,7 +351,8 @@ def create_bundle_sale(
         SaleRecord.sale_no.like(pattern)
     ).order_by(SaleRecord.sale_no.desc()).first()
     if last_no:
-        last_seq = int(last_no[0][-3:])
+        seq_str = last_no[0][len(f"s{date_prefix}"):]
+        last_seq = int(seq_str) if seq_str.isdigit() else 0
         next_seq = last_seq + 1
     else:
         next_seq = 1

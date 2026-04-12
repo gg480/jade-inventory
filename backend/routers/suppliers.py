@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import Supplier
-from schemas import ApiResponse, SupplierCreate, SupplierOut, SupplierUpdate
+from schemas import ApiResponse, SupplierCreate, SupplierOut, SupplierListOut, SupplierUpdate, PaginationMeta
 
 router = APIRouter(prefix="/suppliers", tags=["供应商管理"])
 
@@ -23,16 +23,18 @@ router = APIRouter(prefix="/suppliers", tags=["供应商管理"])
 
 @router.get(
     "/",
-    response_model=ApiResponse[List[SupplierOut]],
+    response_model=ApiResponse[SupplierListOut],
     summary="获取供应商列表",
-    description="支持按名称、联系方式搜索，默认只返回启用的供应商。",
+    description="支持按名称、联系方式搜索，默认只返回启用的供应商。支持分页。",
 )
 def list_suppliers(
     name: Optional[str] = Query(None, description="按名称模糊搜索"),
     contact: Optional[str] = Query(None, description="按联系方式搜索（精确匹配）"),
     include_inactive: bool = Query(False, description="是否包含已停用的供应商"),
+    page: int = Query(1, ge=1, description="页码"),
+    size: int = Query(20, ge=1, le=100, description="每页条数"),
     db: Session = Depends(get_db),
-) -> ApiResponse[List[SupplierOut]]:
+) -> ApiResponse[SupplierListOut]:
     q = db.query(Supplier)
 
     if name:
@@ -43,8 +45,15 @@ def list_suppliers(
     if not include_inactive:
         q = q.filter(Supplier.is_active == True)
 
-    suppliers = q.order_by(desc(Supplier.id)).all()
-    return ApiResponse(data=[SupplierOut.model_validate(s) for s in suppliers])
+    total = q.count()
+    pages = (total + size - 1) // size
+    suppliers = q.order_by(desc(Supplier.id)).offset((page - 1) * size).limit(size).all()
+    return ApiResponse(
+        data=SupplierListOut(
+            items=[SupplierOut.model_validate(s) for s in suppliers],
+            pagination=PaginationMeta(total=total, page=page, size=size, pages=pages),
+        )
+    )
 
 
 # ══════════════════════════════════════════════
