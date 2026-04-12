@@ -9,25 +9,28 @@ import datetime
 import math
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, func
 from sqlalchemy.orm import Session, selectinload
 
 from database import get_db
-from models import DictMaterial, Item, SaleRecord
+from models import Batch, DictMaterial, Item, SaleRecord
 from schemas import (
     ApiResponse,
+    BatchProfitItem,
     DashboardSummary,
     ProfitByCategory,
     ProfitByChannel,
     SalesTrendItem,
     StockAgingItem,
+    StockAgingResponse,
 )
+from config import ALERT_DAYS
 
 router = APIRouter(prefix="/dashboard", tags=["看板统计"])
 
-# 压货默认阈值（天）
-_DEFAULT_AGING_DAYS = 90
+# 压货默认阈值（天），使用 config.ALERT_DAYS
+_DEFAULT_AGING_DAYS = ALERT_DAYS
 
 
 # ──────────────────────────────────────────────
@@ -61,6 +64,68 @@ def _cover_filename(item: Item) -> Optional[str]:
         if img.is_cover:
             return img.filename
     return item.images[0].filename if item.images else None
+
+
+def _compute_batch_stats(batch: Batch, db: Session) -> dict:
+    """
+    计算批次的统计指标（复用 batches.py 中的逻辑）。
+
+    返回：
+    - items_count: 关联货品数量（未删除）
+    - sold_count: 已售货品数量
+    - revenue: 已售货品的实际成交价总和
+    - profit: 利润 = revenue - total_cost
+    - payback_rate: 回本进度 = revenue / total_cost（0‑1）
+    - status: 批次状态（new / selling / paid_back / cleared）
+    """
+    # 关联货品（未删除）
+    items_query = db.query(Item).filter(
+        Item.batch_id == batch.id,
+        Item.is_deleted == False
+    )
+    items_count = items_query.count()
+
+    # 已售货品（通过 sale_records 关联）
+    sold_subquery = (
+        db.query(SaleRecord.item_id)
+        .join(Item, SaleRecord.item_id == Item.id)
+        .filter(Item.batch_id == batch.id, Item.is_deleted == False)
+        .subquery()
+    )
+    sold_count = db.query(func.count()).select_from(sold_subquery).scalar() or 0
+
+    # 已售回款
+    revenue_result = (
+        db.query(func.sum(SaleRecord.actual_price))
+        .join(Item, SaleRecord.item_id == Item.id)
+        .filter(Item.batch_id == batch.id, Item.is_deleted == False)
+        .scalar()
+    )
+    revenue = float(revenue_result) if revenue_result else 0.0
+
+    # 利润与回本进度
+    profit = revenue - batch.total_cost
+    payback_rate = revenue / batch.total_cost if batch.total_cost > 0 else 0.0
+
+    # 批次状态（基于回本进度和销售情况）
+    if sold_count == 0:
+        status = "new"  # 未售
+    elif payback_rate >= 1.0:
+        if sold_count >= batch.quantity:
+            status = "cleared"  # 清仓完
+        else:
+            status = "paid_back"  # 已回本
+    else:
+        status = "selling"  # 销售中
+
+    return {
+        "items_count": items_count,
+        "sold_count": sold_count,
+        "revenue": round(revenue, 2),
+        "profit": round(profit, 2),
+        "payback_rate": round(payback_rate, 4),
+        "status": status,
+    }
 
 
 # ──────────────────────────────────────────────
@@ -111,10 +176,10 @@ def profit_by_category(
                 material_id=row.material_id,
                 material_name=row.material_name,
                 sales_count=row.sales_count,
-                total_revenue=round(revenue, 2),
-                total_cost=round(cost, 2),
-                gross_profit=gp,
-                gross_margin=_safe_margin(gp, revenue),
+                revenue=round(revenue, 2),
+                cost=round(cost, 2),
+                profit=gp,
+                profit_margin=_safe_margin(gp, revenue),
             )
         )
     return ApiResponse(data=result)
@@ -164,10 +229,10 @@ def profit_by_channel(
             ProfitByChannel(
                 channel=row.channel,
                 sales_count=row.sales_count,
-                total_revenue=round(revenue, 2),
-                total_cost=round(cost, 2),
-                gross_profit=gp,
-                gross_margin=_safe_margin(gp, revenue),
+                revenue=round(revenue, 2),
+                cost=round(cost, 2),
+                profit=gp,
+                profit_margin=_safe_margin(gp, revenue),
             )
         )
     return ApiResponse(data=result)
@@ -217,8 +282,8 @@ def sales_trend(
         row.year_month: SalesTrendItem(
             year_month=row.year_month,
             sales_count=row.sales_count,
-            total_revenue=round(float(row.total_revenue or 0), 2),
-            gross_profit=round(float(row.gross_profit or 0), 2),
+            revenue=round(float(row.total_revenue or 0), 2),
+            profit=round(float(row.gross_profit or 0), 2),
         )
         for row in rows
     }
@@ -230,7 +295,7 @@ def sales_trend(
         result.append(
             trend_map.get(
                 ym,
-                SalesTrendItem(year_month=ym, sales_count=0, total_revenue=0.0, gross_profit=0.0),
+                SalesTrendItem(year_month=ym, sales_count=0, revenue=0.0, profit=0.0),
             )
         )
     return ApiResponse(data=result)
@@ -242,16 +307,17 @@ def sales_trend(
 
 @router.get(
     "/stock-aging",
-    response_model=ApiResponse[List[StockAgingItem]],
+    response_model=ApiResponse[StockAgingResponse],
     summary="压货预警",
-    description="列出在库超过指定天数的货品，按库龄降序排列，显示占用资金。",
+    description="列出在库超过指定天数的货品，按库龄降序排列，显示占用资金和柜台号。",
 )
 def stock_aging(
     min_days: int = Query(_DEFAULT_AGING_DAYS, ge=0, description="在库天数阈值，默认 90 天"),
     db: Session = Depends(get_db),
-) -> ApiResponse[List[StockAgingItem]]:
+) -> ApiResponse[StockAgingResponse]:
     today = datetime.date.today()
 
+    # 查询所有在库货品
     items = (
         db.query(Item)
         .options(
@@ -263,28 +329,46 @@ def stock_aging(
         .all()
     )
 
-    result = []
+    aging_items = []
+    total_value = 0.0
+
     for item in items:
         age = _item_age(item, today)
         if age >= min_days:
-            result.append(
+            # 使用 allocated_cost 如果存在，否则用 cost_price
+            cost_value = item.allocated_cost if item.allocated_cost is not None else item.cost_price
+            if cost_value is not None:
+                total_value += cost_value
+
+            aging_items.append(
                 StockAgingItem(
                     item_id=item.id,
                     sku_code=item.sku_code,
+                    name=item.name,
                     batch_code=item.batch_code,
                     material_name=item.material.name,
                     type_name=item.item_type.name if item.item_type else None,
                     cost_price=item.cost_price,
+                    allocated_cost=item.allocated_cost,
                     selling_price=item.selling_price,
                     purchase_date=item.purchase_date,
                     age_days=age,
                     cover_image=_cover_filename(item),
+                    counter=item.counter,
                 )
             )
 
     # 按库龄降序，最久压货排最前
-    result.sort(key=lambda x: x.age_days, reverse=True)
-    return ApiResponse(data=result)
+    aging_items.sort(key=lambda x: x.age_days, reverse=True)
+
+    # 构建响应
+    response = StockAgingResponse(
+        items=aging_items,
+        total_items=len(aging_items),
+        total_value=round(total_value, 2),
+    )
+
+    return ApiResponse(data=response)
 
 
 # ──────────────────────────────────────────────
@@ -294,76 +378,122 @@ def stock_aging(
 @router.get(
     "/summary",
     response_model=ApiResponse[DashboardSummary],
-    summary="首页概览",
-    description="返回总库存件数、占用资金、本月销售额/毛利、压货件数等核心指标。",
+    summary="仪表板概览",
+    description="返回关键经营指标：在库件数、库存金额、本月销售、本月毛利、本月销售件数。",
 )
 def dashboard_summary(
-    aging_days: int = Query(_DEFAULT_AGING_DAYS, ge=0, description="压货阈值（天），默认 90"),
     db: Session = Depends(get_db),
 ) -> ApiResponse[DashboardSummary]:
     today = datetime.date.today()
     month_start = today.replace(day=1)
 
-    # ── 库存统计 ──
-    stock_rows = (
-        db.query(
-            Item.status,
-            func.count(Item.id).label("cnt"),
-            func.sum(Item.cost_price).label("total_cost"),
-        )
-        .filter(Item.is_deleted == False, Item.status.in_(["in_stock", "lent_out"]))
-        .group_by(Item.status)
-        .all()
-    )
-    total_stock = 0
-    total_stock_value = 0.0
-    lent_out_count = 0
-    for row in stock_rows:
-        if row.status == "in_stock":
-            total_stock = row.cnt
-            total_stock_value = float(row.total_cost or 0)
-        elif row.status == "lent_out":
-            lent_out_count = row.cnt
+    # 1. total_items: 在库货品数（status='in_stock' 且未删除）
+    total_items = db.query(Item).filter(
+        Item.status == "in_stock",
+        Item.is_deleted == False,
+    ).count()
 
-    # ── 本月销售统计 ──
-    month_rows = (
-        db.query(
-            func.count(SaleRecord.id).label("sales_count"),
-            func.sum(SaleRecord.actual_price).label("revenue"),
-            func.sum(SaleRecord.actual_price - Item.cost_price).label("profit"),
+    # 2. total_stock_value: 库存进价总和
+    # 对于高货：使用 cost_price；对于通货：使用 allocated_cost
+    stock_value_result = db.query(
+        func.sum(
+            func.coalesce(Item.allocated_cost, Item.cost_price, 0.0)
         )
-        .join(Item, SaleRecord.item_id == Item.id)
-        .filter(SaleRecord.sale_date >= month_start)
-        .one()
-    )
-    monthly_sales_count = month_rows.sales_count or 0
-    monthly_revenue = round(float(month_rows.revenue or 0), 2)
-    monthly_profit = round(float(month_rows.profit or 0), 2)
+    ).filter(
+        Item.status == "in_stock",
+        Item.is_deleted == False,
+    ).scalar()
+    total_stock_value = float(stock_value_result) if stock_value_result else 0.0
 
-    # ── 压货预警统计 ──
-    in_stock_items = (
-        db.query(Item.purchase_date, Item.created_at, Item.cost_price)
-        .filter(Item.status == "in_stock", Item.is_deleted == False)
-        .all()
+    # 3. 本月销售额、本月销售件数
+    month_sales_query = db.query(SaleRecord).filter(
+        SaleRecord.sale_date >= month_start
     )
-    overage_count = 0
-    overage_value = 0.0
-    for row in in_stock_items:
-        ref = row.purchase_date or row.created_at.date()
-        age = (today - ref).days
-        if age >= aging_days:
-            overage_count += 1
-            overage_value += row.cost_price
+    month_sold_count = month_sales_query.count()
+
+    month_revenue_result = db.query(
+        func.sum(SaleRecord.actual_price)
+    ).filter(
+        SaleRecord.sale_date >= month_start
+    ).scalar()
+    month_revenue = float(month_revenue_result) if month_revenue_result else 0.0
+
+    # 4. 本月毛利：实际成交价 - 成本
+    month_profit_result = db.query(
+        func.sum(
+            SaleRecord.actual_price -
+            func.coalesce(Item.allocated_cost, Item.cost_price, 0.0)
+        )
+    ).join(
+        Item, SaleRecord.item_id == Item.id
+    ).filter(
+        SaleRecord.sale_date >= month_start,
+        Item.is_deleted == False,
+    ).scalar()
+    month_profit = float(month_profit_result) if month_profit_result else 0.0
 
     return ApiResponse(
         data=DashboardSummary(
-            total_stock=total_stock,
+            total_items=total_items,
             total_stock_value=round(total_stock_value, 2),
-            lent_out_count=lent_out_count,
-            monthly_sales_count=monthly_sales_count,
-            monthly_revenue=monthly_revenue,
-            monthly_profit=monthly_profit,
-            overage_count=overage_count,
-            overage_value=round(overage_value, 2),
+            month_revenue=round(month_revenue, 2),
+            month_profit=round(month_profit, 2),
+            month_sold_count=month_sold_count,
         )
     )
+
+
+# ──────────────────────────────────────────────
+# 6. 批次利润看板
+# ──────────────────────────────────────────────
+
+@router.get(
+    "/batch-profit",
+    response_model=ApiResponse[List[BatchProfitItem]],
+    summary="批次利润看板",
+    description="返回所有批次回本状态列表，支持按材质和状态筛选。",
+)
+def get_batch_profit(
+    material_id: Optional[int] = Query(None, description="按材质ID筛选"),
+    status: Optional[str] = Query(None, description="按批次状态筛选：new / selling / paid_back / cleared"),
+    db: Session = Depends(get_db),
+) -> ApiResponse[List[BatchProfitItem]]:
+    # 构建基础查询
+    query = db.query(Batch)
+
+    if material_id is not None:
+        # 验证材质是否存在（可选）
+        material = db.get(DictMaterial, material_id)
+        if not material:
+            raise HTTPException(status_code=404, detail="材质不存在")
+        query = query.filter(Batch.material_id == material_id)
+
+    # 获取所有符合条件的批次
+    batches = query.order_by(Batch.created_at.desc()).all()
+
+    result = []
+    for batch in batches:
+        stats = _compute_batch_stats(batch, db)
+
+        # 按状态筛选（如果提供了 status 参数）
+        if status is not None and stats["status"] != status:
+            continue
+
+        # 获取材质名称
+        material_name = batch.material.name
+
+        result.append(
+            BatchProfitItem(
+                batch_code=batch.batch_code,
+                material_name=material_name,
+                total_cost=batch.total_cost,
+                quantity=batch.quantity,
+                sold_count=stats["sold_count"],
+                revenue=stats["revenue"],
+                profit=stats["profit"],
+                payback_rate=stats["payback_rate"],
+                status=stats["status"],
+            )
+        )
+
+    return ApiResponse(data=result)
