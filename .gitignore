@@ -10,7 +10,6 @@ data/images/*
 # 前端构建产物
 frontend/node_modules/
 frontend/dist/
-backend/static/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
