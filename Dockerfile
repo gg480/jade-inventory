@@ -22,7 +22,9 @@ EXPOSE 8000
 ENV RESET_DB=false
 ENV CORS_ORIGINS=*
 ENV DEBUG=false
-ENV PORT=8000
 
-# Start server
-CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
+# 用 entrypoint.sh 读取 Zeabur 注入的 WEB_PORT
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+ENTRYPOINT ["/app/entrypoint.sh"]
