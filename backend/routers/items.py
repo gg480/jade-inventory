@@ -7,14 +7,18 @@
 
 import datetime
 import math
+import os
+import uuid
+from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
+from config import IMAGE_DIR, ALLOWED_IMAGE_EXTENSIONS, MAX_IMAGE_SIZE
 from database import get_db
-from models import Batch, DictMaterial, DictTag, DictType, Item, ItemSpec, Supplier
+from models import Batch, DictMaterial, DictTag, DictType, Item, ItemImage, ItemSpec, Supplier
 from schemas import (
     ApiResponse,
     DictTagOut,
@@ -591,3 +595,165 @@ def delete_item(
     item.is_deleted = True
     db.commit()
     return ApiResponse(message="已删除")
+
+
+# ──────────────────────────────────────────────
+# 图片管理端点
+# ──────────────────────────────────────────────
+
+@router.post(
+    "/{item_id}/images",
+    response_model=ApiResponse[List[ItemImageOut]],
+    status_code=status.HTTP_201_CREATED,
+    summary="上传货品图片",
+    description="支持多文件上传，第一张图片自动设为封面。",
+)
+async def upload_images(
+    item_id: int,
+    files: List[UploadFile] = File(..., description="图片文件（支持多张）"),
+    db: Session = Depends(get_db),
+) -> ApiResponse[List[ItemImageOut]]:
+    # 校验货品存在
+    item = db.query(Item).filter(Item.id == item_id, Item.is_deleted == False).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="货品不存在或已删除")
+
+    # 确保图片目录存在
+    IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+
+    # 检查该货品是否已有图片
+    existing_count = db.query(ItemImage).filter(ItemImage.item_id == item_id).count()
+
+    created_images: List[ItemImage] = []
+    for i, file in enumerate(files):
+        # 校验扩展名
+        ext = Path(file.filename or "").suffix.lower()
+        if ext not in ALLOWED_IMAGE_EXTENSIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"文件「{file.filename}」格式不支持，允许：{', '.join(ALLOWED_IMAGE_EXTENSIONS)}",
+            )
+
+        # 读取文件内容
+        content = await file.read()
+        if len(content) > MAX_IMAGE_SIZE:
+            max_mb = MAX_IMAGE_SIZE / 1024 / 1024
+            raise HTTPException(
+                status_code=400,
+                detail=f"文件「{file.filename}」超过 {max_mb:.0f}MB 限制",
+            )
+
+        # 生成唯一文件名
+        unique_name = f"{item_id}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:8]}{ext}"
+        file_path = IMAGE_DIR / unique_name
+
+        # 写入磁盘
+        with open(file_path, "wb") as f:
+            f.write(content)
+
+        # 第一张图片自动设为封面
+        is_cover = (existing_count == 0 and i == 0)
+        img_record = ItemImage(
+            item_id=item_id,
+            filename=unique_name,
+            is_cover=is_cover,
+        )
+        db.add(img_record)
+        created_images.append(img_record)
+
+    db.commit()
+    for img in created_images:
+        db.refresh(img)
+
+    return ApiResponse(
+        data=[ItemImageOut.model_validate(img) for img in created_images]
+    )
+
+
+@router.delete(
+    "/{item_id}/images/{image_id}",
+    response_model=ApiResponse[None],
+    summary="删除货品图片",
+    description="删除图片文件和数据库记录；若删除的是封面，自动将第一张剩余图片设为封面。",
+)
+def delete_image(
+    item_id: int,
+    image_id: int,
+    db: Session = Depends(get_db),
+) -> ApiResponse[None]:
+    # 校验货品存在
+    item = db.query(Item).filter(Item.id == item_id, Item.is_deleted == False).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="货品不存在或已删除")
+
+    # 查找图片记录
+    img = db.query(ItemImage).filter(
+        ItemImage.id == image_id, ItemImage.item_id == item_id
+    ).first()
+    if not img:
+        raise HTTPException(status_code=404, detail="图片不存在")
+
+    # 删除物理文件
+    file_path = IMAGE_DIR / img.filename
+    if file_path.exists():
+        try:
+            file_path.unlink()
+        except OSError:
+            pass  # 文件删除失败不阻断流程
+
+    # 记录是否是封面
+    was_cover = img.is_cover
+
+    # 删除数据库记录
+    db.delete(img)
+    db.commit()
+
+    # 如果删除的是封面，将第一张剩余图片设为封面
+    if was_cover:
+        first_remaining = (
+            db.query(ItemImage)
+            .filter(ItemImage.item_id == item_id)
+            .order_by(ItemImage.created_at)
+            .first()
+        )
+        if first_remaining:
+            first_remaining.is_cover = True
+            db.commit()
+
+    return ApiResponse(message="图片已删除")
+
+
+@router.put(
+    "/{item_id}/images/{image_id}/cover",
+    response_model=ApiResponse[ItemImageOut],
+    summary="设置封面图",
+    description="将指定图片设为封面，同时取消其他图片的封面状态。",
+)
+def set_cover_image(
+    item_id: int,
+    image_id: int,
+    db: Session = Depends(get_db),
+) -> ApiResponse[ItemImageOut]:
+    # 校验货品存在
+    item = db.query(Item).filter(Item.id == item_id, Item.is_deleted == False).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="货品不存在或已删除")
+
+    # 查找目标图片
+    img = db.query(ItemImage).filter(
+        ItemImage.id == image_id, ItemImage.item_id == item_id
+    ).first()
+    if not img:
+        raise HTTPException(status_code=404, detail="图片不存在")
+
+    # 取消该货品所有图片的封面状态
+    db.query(ItemImage).filter(ItemImage.item_id == item_id).update(
+        {ItemImage.is_cover: False}
+    )
+
+    # 设置目标图片为封面
+    img.is_cover = True
+    db.commit()
+    db.refresh(img)
+
+    return ApiResponse(data=ItemImageOut.model_validate(img))

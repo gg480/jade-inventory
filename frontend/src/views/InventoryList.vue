@@ -308,6 +308,27 @@ async function batchLendOut() {
   }
 }
 
+// 导出库存Excel
+async function handleExportInventory() {
+  try {
+    const params = {}
+    if (filters.value.material_id) params.material_id = filters.value.material_id
+    if (filters.value.type_id) params.type_id = filters.value.type_id
+    if (filters.value.status) params.status = filters.value.status
+    if (filters.value.keyword) params.keyword = filters.value.keyword
+    if (filters.value.counter) params.counter = filters.value.counter
+    const resp = await api.exportData.inventory(params)
+    const url = URL.createObjectURL(resp)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `库存导出_${new Date().toISOString().slice(0,10).replace(/-/g,'')}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    console.error('导出失败:', e)
+  }
+}
+
 // 计算库龄（天数）
 function calculateAging(purchaseDate) {
   if (!purchaseDate) return null
@@ -339,7 +360,10 @@ onMounted(() => {
         <h1 class="text-2xl font-bold text-gray-900">库存列表</h1>
         <p class="mt-1 text-sm text-gray-600">管理所有在库货品，支持筛选和搜索</p>
       </div>
-      <div class="mt-4 sm:mt-0">
+      <div class="mt-4 sm:mt-0 flex gap-2">
+        <button @click="handleExportInventory" class="btn btn-secondary" title="导出库存Excel">
+          导出
+        </button>
         <!-- 入库下拉菜单 -->
         <div class="relative inline-block text-left" ref="inboundDropdownRef">
           <button

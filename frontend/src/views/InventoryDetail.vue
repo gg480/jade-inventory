@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import api from '../api'
+import api, { IMAGE_BASE_URL } from '../api'
 import SaleDialog from '../components/SaleDialog.vue'
 
 const route = useRoute()
@@ -129,6 +129,53 @@ function handleSaleSuccess() {
   fetchItem() // 刷新详情
 }
 
+// 图片管理
+const uploadingImages = ref(false)
+
+function getImageUrl(filename) {
+  if (!filename) return ''
+  return `${IMAGE_BASE_URL}/${filename}`
+}
+
+async function handleImageUpload(event) {
+  const files = event.target.files
+  if (!files || files.length === 0) return
+
+  uploadingImages.value = true
+  try {
+    const formData = new FormData()
+    for (let i = 0; i < files.length; i++) {
+      formData.append('files', files[i])
+    }
+    await api.items.uploadItemImage(route.params.id, formData)
+    await fetchItem()
+  } catch (e) {
+    console.error('图片上传失败:', e)
+  } finally {
+    uploadingImages.value = false
+    event.target.value = '' // 清空input以允许重复上传相同文件
+  }
+}
+
+async function deleteImage(imageId) {
+  if (!confirm('确定要删除这张图片吗？')) return
+  try {
+    await api.items.deleteItemImage(route.params.id, imageId)
+    await fetchItem()
+  } catch (e) {
+    console.error('删除图片失败:', e)
+  }
+}
+
+async function setCover(imageId) {
+  try {
+    await api.items.setCoverImage(route.params.id, imageId)
+    await fetchItem()
+  } catch (e) {
+    console.error('设置封面失败:', e)
+  }
+}
+
 onMounted(() => {
   fetchItem()
 })
@@ -209,14 +256,59 @@ onMounted(() => {
         <div class="lg:col-span-2">
           <!-- 图片展示 -->
           <div class="card mb-6">
-            <h2 class="text-lg font-semibold text-gray-900 mb-4">图片</h2>
-            <div v-if="item.images && item.images.length > 0" class="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div v-for="(img, index) in item.images" :key="img.id" class="relative">
-                <img
-                  :src="`https://picsum.photos/200/200?random=${index}`"
-                  :alt="`货品图片 ${index + 1}`"
-                  class="w-full h-40 object-cover rounded-lg"
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-lg font-semibold text-gray-900">图片</h2>
+              <div v-if="item.status === 'in_stock'">
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  class="hidden"
+                  :id="'image-upload-' + item.id"
+                  @change="handleImageUpload"
                 />
+                <label
+                  :for="'image-upload-' + item.id"
+                  class="inline-flex items-center px-3 py-1.5 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 cursor-pointer"
+                  :class="{ 'opacity-50 pointer-events-none': uploadingImages }"
+                >
+                  {{ uploadingImages ? '上传中...' : '上传图片' }}
+                </label>
+              </div>
+            </div>
+            <div v-if="item.images && item.images.length > 0" class="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div v-for="img in item.images" :key="img.id" class="relative group">
+                <img
+                  :src="getImageUrl(img.filename)"
+                  :alt="`货品图片`"
+                  class="w-full h-40 object-cover rounded-lg"
+                  @error="$event.target.src = `https://picsum.photos/200/200?random=${img.id}`"
+                />
+                <!-- 封面标记 -->
+                <span
+                  v-if="img.is_cover"
+                  class="absolute top-1 left-1 px-1.5 py-0.5 bg-emerald-500 text-white text-xs rounded"
+                >
+                  封面
+                </span>
+                <!-- 操作按钮（hover显示） -->
+                <div class="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center space-x-2">
+                  <button
+                    v-if="!img.is_cover"
+                    @click="setCover(img.id)"
+                    class="px-2 py-1 bg-white text-xs text-gray-700 rounded hover:bg-gray-100"
+                    title="设为封面"
+                  >
+                    设为封面
+                  </button>
+                  <button
+                    @click="deleteImage(img.id)"
+                    class="px-2 py-1 bg-red-500 text-xs text-white rounded hover:bg-red-600"
+                    title="删除图片"
+                  >
+                    删除
+                  </button>
+                </div>
               </div>
             </div>
             <div v-else class="text-center py-8">

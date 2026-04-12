@@ -1,218 +1,253 @@
-<script setup>
-import { ref, onMounted } from 'vue'
-
-const suppliers = ref([
-  { id: 1, name: '广州翡翠批发市场', contact: '张老板', phone: '13800138000', address: '广州市荔湾区', notes: '主营翡翠手镯' },
-  { id: 2, name: '东海珍珠基地', contact: '李经理', phone: '13900139000', address: '浙江省诸暨市', notes: '淡水珍珠供应商' },
-  { id: 3, name: '云南银饰工坊', contact: '王师傅', phone: '13700137000', address: '云南省大理市', notes: '手工银饰定制' },
-])
-
-const newSupplier = ref({
-  name: '',
-  contact: '',
-  phone: '',
-  address: '',
-  notes: ''
-})
-
-// 添加供货商
-function addSupplier() {
-  if (!newSupplier.value.name.trim()) {
-    alert('请输入供货商名称')
-    return
-  }
-
-  const newId = suppliers.value.length > 0
-    ? Math.max(...suppliers.value.map(s => s.id)) + 1
-    : 1
-
-  suppliers.value.push({
-    id: newId,
-    ...newSupplier.value
-  })
-
-  alert('添加成功')
-  newSupplier.value = { name: '', contact: '', phone: '', address: '', notes: '' }
-}
-
-// 删除供货商
-function deleteSupplier(id, name) {
-  if (!confirm(`确定要删除供货商 "${name}" 吗？`)) return
-
-  const index = suppliers.value.findIndex(s => s.id === id)
-  if (index !== -1) {
-    suppliers.value.splice(index, 1)
-    alert('删除成功')
-  }
-}
-
-// 编辑供货商
-const editingSupplier = ref(null)
-function startEdit(supplier) {
-  editingSupplier.value = { ...supplier }
-}
-
-function saveEdit() {
-  if (!editingSupplier.value.name.trim()) {
-    alert('请输入供货商名称')
-    return
-  }
-
-  const index = suppliers.value.findIndex(s => s.id === editingSupplier.value.id)
-  if (index !== -1) {
-    suppliers.value[index] = { ...editingSupplier.value }
-    alert('保存成功')
-    editingSupplier.value = null
-  }
-}
-
-function cancelEdit() {
-  editingSupplier.value = null
-}
-</script>
-
 <template>
   <div>
-    <!-- 页面标题 -->
-    <div class="mb-6">
-      <h1 class="text-2xl font-bold text-gray-900">供货商管理</h1>
-      <p class="mt-1 text-sm text-gray-600">管理货品供货商信息</p>
+    <div class="flex justify-between items-center mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900">供应商管理</h1>
+        <p class="mt-1 text-sm text-gray-600">管理货品供货商信息</p>
+      </div>
+      <button @click="openAddModal" class="btn btn-success">
+        <svg class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+        </svg>
+        新增供应商
+      </button>
     </div>
 
-    <!-- 添加供货商表单 -->
-    <div class="card mb-6">
-      <h2 class="text-lg font-semibold text-gray-900 mb-4">添加新供货商</h2>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label class="form-label">供货商名称 <span class="text-red-500">*</span></label>
-          <input v-model="newSupplier.name" type="text" class="form-input" placeholder="如：广州翡翠批发市场" />
-        </div>
-        <div>
-          <label class="form-label">联系人</label>
-          <input v-model="newSupplier.contact" type="text" class="form-input" placeholder="联系人姓名" />
-        </div>
-        <div>
-          <label class="form-label">联系电话</label>
-          <input v-model="newSupplier.phone" type="tel" class="form-input" placeholder="手机或固定电话" />
-        </div>
-        <div>
-          <label class="form-label">地址</label>
-          <input v-model="newSupplier.address" type="text" class="form-input" placeholder="供货商地址" />
-        </div>
-        <div class="md:col-span-2">
-          <label class="form-label">备注</label>
-          <textarea
-            v-model="newSupplier.notes"
-            rows="2"
+    <!-- 搜索栏 -->
+    <div class="mb-6 card">
+      <div class="flex flex-col sm:flex-row gap-4">
+        <div class="flex-1">
+          <input
+            v-model="searchName"
+            type="text"
             class="form-input"
-            placeholder="供货商备注信息..."
-          ></textarea>
+            placeholder="按名称搜索..."
+            @input="debouncedFetch"
+          />
         </div>
-        <div class="md:col-span-2">
-          <button @click="addSupplier" class="btn btn-success">
-            添加供货商
-          </button>
+        <label class="flex items-center space-x-2">
+          <input
+            v-model="includeInactive"
+            type="checkbox"
+            class="h-4 w-4 text-primary-600 rounded"
+            @change="fetchSuppliers"
+          />
+          <span class="text-sm text-gray-700">显示已停用</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- 加载状态 -->
+    <div v-if="loading" class="text-center py-12">
+      <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      <p class="mt-4 text-gray-600">加载供应商数据中...</p>
+    </div>
+
+    <!-- 空状态 -->
+    <div v-else-if="suppliers.length === 0" class="card text-center py-12">
+      <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+      </svg>
+      <h3 class="mt-2 text-sm font-medium text-gray-900">暂无供应商</h3>
+      <p class="mt-1 text-sm text-gray-500">点击"新增供应商"按钮添加第一位供应商。</p>
+    </div>
+
+    <!-- 供应商列表 -->
+    <div v-else>
+      <!-- 桌面表格 -->
+      <div class="hidden md:block card overflow-hidden">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">名称</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">联系方式</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">备注</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">状态</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-200">
+            <tr v-for="s in suppliers" :key="s.id" class="hover:bg-gray-50">
+              <td class="px-6 py-4">
+                <div class="text-sm font-medium text-gray-900">{{ s.name }}</div>
+              </td>
+              <td class="px-6 py-4 text-sm text-gray-600">{{ s.contact || '-' }}</td>
+              <td class="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">{{ s.notes || '-' }}</td>
+              <td class="px-6 py-4">
+                <span :class="s.is_active ? 'text-green-600' : 'text-gray-400'" class="text-sm">
+                  {{ s.is_active ? '启用' : '停用' }}
+                </span>
+              </td>
+              <td class="px-6 py-4 text-sm space-x-3">
+                <button @click="openEditModal(s)" class="text-primary-600 hover:text-primary-900">编辑</button>
+                <button
+                  @click="toggleStatus(s)"
+                  :class="s.is_active ? 'text-red-600 hover:text-red-900' : 'text-green-600 hover:text-green-900'"
+                >
+                  {{ s.is_active ? '停用' : '启用' }}
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 移动端卡片 -->
+      <div class="md:hidden space-y-3">
+        <div v-for="s in suppliers" :key="s.id" class="card p-4">
+          <div class="flex justify-between items-start">
+            <div>
+              <h3 class="text-sm font-medium text-gray-900">{{ s.name }}</h3>
+              <p v-if="s.contact" class="mt-1 text-xs text-gray-500">{{ s.contact }}</p>
+              <p v-if="s.notes" class="mt-1 text-xs text-gray-400 truncate max-w-[200px]">{{ s.notes }}</p>
+            </div>
+            <span :class="s.is_active ? 'text-green-600' : 'text-gray-400'" class="text-xs">
+              {{ s.is_active ? '启用' : '停用' }}
+            </span>
+          </div>
+          <div class="mt-3 flex justify-end space-x-3">
+            <button @click="openEditModal(s)" class="text-sm text-primary-600">编辑</button>
+            <button
+              @click="toggleStatus(s)"
+              :class="s.is_active ? 'text-red-600' : 'text-green-600'"
+              class="text-sm"
+            >
+              {{ s.is_active ? '停用' : '启用' }}
+            </button>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- 供货商列表 -->
-    <div class="card">
-      <h2 class="text-lg font-semibold text-gray-900 mb-4">供货商列表</h2>
-
-      <div v-if="suppliers.length === 0" class="text-center py-8 text-gray-500">
-        暂无供货商数据
-      </div>
-
-      <div v-else class="space-y-4">
-        <!-- 编辑模式 -->
-        <div v-if="editingSupplier" class="border border-blue-200 rounded-lg p-4 bg-blue-50">
-          <h3 class="font-medium text-gray-900 mb-3">编辑供货商</h3>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label class="form-label">供货商名称 <span class="text-red-500">*</span></label>
-              <input v-model="editingSupplier.name" type="text" class="form-input" />
-            </div>
-            <div>
-              <label class="form-label">联系人</label>
-              <input v-model="editingSupplier.contact" type="text" class="form-input" />
-            </div>
-            <div>
-              <label class="form-label">联系电话</label>
-              <input v-model="editingSupplier.phone" type="tel" class="form-input" />
-            </div>
-            <div>
-              <label class="form-label">地址</label>
-              <input v-model="editingSupplier.address" type="text" class="form-input" />
-            </div>
-            <div class="md:col-span-2">
-              <label class="form-label">备注</label>
-              <textarea
-                v-model="editingSupplier.notes"
-                rows="2"
-                class="form-input"
-              ></textarea>
-            </div>
-            <div class="md:col-span-2 flex justify-end space-x-3">
-              <button @click="cancelEdit" class="btn btn-secondary">
-                取消
-              </button>
-              <button @click="saveEdit" class="btn btn-success">
-                保存
-              </button>
-            </div>
+    <!-- 模态框 -->
+    <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center">
+      <div class="fixed inset-0 bg-black/40" @click="closeModal"></div>
+      <div class="relative bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">
+          {{ isEdit ? '编辑供应商' : '新增供应商' }}
+        </h3>
+        <div class="space-y-4">
+          <div>
+            <label class="form-label">名称 <span class="text-red-500">*</span></label>
+            <input v-model="form.name" type="text" class="form-input" placeholder="供应商名称" />
+          </div>
+          <div>
+            <label class="form-label">联系方式</label>
+            <input v-model="form.contact" type="text" class="form-input" placeholder="联系人或电话" />
+          </div>
+          <div>
+            <label class="form-label">备注</label>
+            <textarea v-model="form.notes" rows="2" class="form-input" placeholder="备注信息"></textarea>
           </div>
         </div>
-
-        <!-- 供货商卡片 -->
-        <div
-          v-for="supplier in suppliers"
-          :key="supplier.id"
-          class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50"
-        >
-          <div class="flex items-start justify-between">
-            <div class="flex-1">
-              <h3 class="font-medium text-gray-900">{{ supplier.name }}</h3>
-
-              <div class="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                <div v-if="supplier.contact" class="flex items-center">
-                  <span class="text-gray-500 w-16">联系人：</span>
-                  <span class="text-gray-900">{{ supplier.contact }}</span>
-                </div>
-                <div v-if="supplier.phone" class="flex items-center">
-                  <span class="text-gray-500 w-16">电话：</span>
-                  <span class="text-gray-900">{{ supplier.phone }}</span>
-                </div>
-                <div v-if="supplier.address" class="flex items-center md:col-span-2">
-                  <span class="text-gray-500 w-16">地址：</span>
-                  <span class="text-gray-900">{{ supplier.address }}</span>
-                </div>
-                <div v-if="supplier.notes" class="flex items-start md:col-span-2">
-                  <span class="text-gray-500 w-16">备注：</span>
-                  <span class="text-gray-900">{{ supplier.notes }}</span>
-                </div>
-              </div>
-            </div>
-
-            <div class="ml-4 flex space-x-2">
-              <button
-                @click="startEdit(supplier)"
-                class="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                title="编辑"
-              >
-                编辑
-              </button>
-              <button
-                @click="deleteSupplier(supplier.id, supplier.name)"
-                class="text-red-600 hover:text-red-800 text-sm font-medium"
-                title="删除"
-              >
-                删除
-              </button>
-            </div>
-          </div>
+        <div class="mt-6 flex justify-end space-x-3">
+          <button @click="closeModal" class="btn btn-secondary">取消</button>
+          <button @click="handleSubmit" :disabled="submitting" class="btn btn-success">
+            {{ submitting ? '保存中...' : '保存' }}
+          </button>
         </div>
       </div>
     </div>
   </div>
 </template>
+
+<script setup>
+import { ref, onMounted } from 'vue'
+import api from '@/api'
+
+const suppliers = ref([])
+const loading = ref(false)
+const searchName = ref('')
+const includeInactive = ref(false)
+
+// 模态框
+const showModal = ref(false)
+const isEdit = ref(false)
+const editingId = ref(null)
+const submitting = ref(false)
+const form = ref({ name: '', contact: '', notes: '' })
+
+function debounce(fn, wait) {
+  let t
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), wait) }
+}
+
+const debouncedFetch = debounce(() => fetchSuppliers(), 500)
+
+onMounted(() => fetchSuppliers())
+
+async function fetchSuppliers() {
+  loading.value = true
+  try {
+    const params = {}
+    if (searchName.value) params.name = searchName.value
+    if (includeInactive.value) params.include_inactive = true
+    const data = await api.suppliers.getSuppliers(params)
+    suppliers.value = data?.items || data || []
+  } catch (e) {
+    console.error('获取供应商列表失败:', e)
+    suppliers.value = []
+  } finally {
+    loading.value = false
+  }
+}
+
+function openAddModal() {
+  isEdit.value = false
+  editingId.value = null
+  form.value = { name: '', contact: '', notes: '' }
+  showModal.value = true
+}
+
+function openEditModal(s) {
+  isEdit.value = true
+  editingId.value = s.id
+  form.value = { name: s.name, contact: s.contact || '', notes: s.notes || '' }
+  showModal.value = true
+}
+
+function closeModal() {
+  showModal.value = false
+}
+
+async function handleSubmit() {
+  if (!form.value.name.trim()) {
+    alert('请输入供应商名称')
+    return
+  }
+  submitting.value = true
+  try {
+    if (isEdit.value) {
+      await api.suppliers.updateSupplier(editingId.value, form.value)
+    } else {
+      await api.suppliers.createSupplier(form.value)
+    }
+    closeModal()
+    await fetchSuppliers()
+  } catch (e) {
+    console.error('保存供应商失败:', e)
+  } finally {
+    submitting.value = false
+  }
+}
+
+async function toggleStatus(s) {
+  const newStatus = !s.is_active
+  const msg = newStatus ? '确定要启用该供应商吗？' : '确定要停用该供应商吗？'
+  if (!confirm(msg)) return
+  try {
+    await api.suppliers.updateSupplier(s.id, { is_active: newStatus })
+    await fetchSuppliers()
+  } catch (e) {
+    console.error('切换状态失败:', e)
+  }
+}
+</script>
+
+<style scoped>
+.form-label { @apply block text-sm font-medium text-gray-700 mb-1; }
+.form-input { @apply block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm px-3 py-2 border; }
+.btn { @apply inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2; }
+.btn-success { @apply bg-green-600 text-white hover:bg-green-700 focus:ring-green-500; }
+.btn-secondary { @apply bg-gray-200 text-gray-700 hover:bg-gray-300 focus:ring-gray-400; }
+</style>
