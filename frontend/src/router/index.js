@@ -1,12 +1,15 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
-// 页面组件（暂时用占位组件，后续实现）
+// 页面组件（懒加载）
 const InventoryList = () => import('../views/InventoryList.vue')
 const InventoryDetail = () => import('../views/InventoryDetail.vue')
 const InventoryAdd = () => import('../views/InventoryAdd.vue')
-const SalesList = () => import('../views/SalesList.vue')
+const BatchAdd = () => import('../views/BatchAdd.vue')
+const SaleList = () => import('../views/SalesList.vue') // 实际文件名为 SalesList.vue
 const Dashboard = () => import('../views/Dashboard.vue')
-const DictsManagement = () => import('../views/DictsManagement.vue')
+const DictManage = () => import('../views/DictsManagement.vue') // 实际文件名为 DictsManagement.vue
+const MetalPriceManage = () => import('../views/MetalPriceManage.vue')
+const CustomerList = () => import('../views/CustomerList.vue')
 const SuppliersManagement = () => import('../views/SuppliersManagement.vue')
 
 const routes = [
@@ -21,17 +24,23 @@ const routes = [
     meta: { title: '库存列表' }
   },
   {
+    path: '/inventory/add',
+    name: 'inventory-add',
+    component: InventoryAdd,
+    meta: { title: '高货入库' }
+  },
+  {
+    path: '/inventory/batch',
+    name: 'batch-add',
+    component: BatchAdd,
+    meta: { title: '通货批次入库' }
+  },
+  {
     path: '/inventory/:id',
     name: 'inventory-detail',
     component: InventoryDetail,
     meta: { title: '货品详情' },
     props: true
-  },
-  {
-    path: '/inventory/add',
-    name: 'inventory-add',
-    component: InventoryAdd,
-    meta: { title: '入库表单' }
   },
   {
     path: '/inventory/edit/:id',
@@ -43,7 +52,7 @@ const routes = [
   {
     path: '/sales',
     name: 'sales',
-    component: SalesList,
+    component: SaleList,
     meta: { title: '销售记录' }
   },
   {
@@ -54,9 +63,21 @@ const routes = [
   },
   {
     path: '/settings/dicts',
-    name: 'dicts-management',
-    component: DictsManagement,
+    name: 'dict-manage',
+    component: DictManage,
     meta: { title: '字典管理' }
+  },
+  {
+    path: '/settings/metal',
+    name: 'metal-price-manage',
+    component: MetalPriceManage,
+    meta: { title: '贵金属市价管理' }
+  },
+  {
+    path: '/customers',
+    name: 'customers',
+    component: CustomerList,
+    meta: { title: '客户管理' }
   },
   {
     path: '/settings/suppliers',

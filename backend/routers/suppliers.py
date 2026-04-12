@@ -119,3 +119,5 @@ def update_supplier(
     db.commit()
     db.refresh(supplier)
     return ApiResponse(data=SupplierOut.model_validate(supplier))
+
+

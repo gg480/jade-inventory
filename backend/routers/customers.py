@@ -231,3 +231,5 @@ def get_customer_detail(
     detail.purchase_records = purchase_records
 
     return ApiResponse(data=detail)
+
+

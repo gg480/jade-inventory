@@ -28,18 +28,30 @@ api.interceptors.request.use(
 // 响应拦截器：统一处理错误
 api.interceptors.response.use(
   (response) => {
-    // 后端统一格式：{ code: 0, data: ..., message: 'ok' }
-    const { code, data, message } = response.data
-    if (code === 0) {
-      return data
-    } else {
-      // 业务错误，弹出提示
-      const errorMessage = message || '请求失败'
-      alert(`错误 ${code}: ${errorMessage}`)
-      const error = new Error(errorMessage)
-      error.code = code
-      return Promise.reject(error)
+    const responseData = response.data
+
+    // 情况1：后端直接返回列表（字典接口）
+    if (Array.isArray(responseData)) {
+      return responseData
     }
+
+    // 情况2：后端返回 { code, data, message } 格式
+    if (responseData && typeof responseData === 'object' && 'code' in responseData) {
+      const { code, data, message } = responseData
+      if (code === 0) {
+        return data
+      } else {
+        // 业务错误，弹出提示
+        const errorMessage = message || '请求失败'
+        alert(`错误 ${code}: ${errorMessage}`)
+        const error = new Error(errorMessage)
+        error.code = code
+        return Promise.reject(error)
+      }
+    }
+
+    // 情况3：其他格式直接返回
+    return responseData
   },
   (error) => {
     // HTTP错误
@@ -102,6 +114,21 @@ const dicts = {
   createTag: (data) => api.post('/dicts/tags', data),
   updateTag: (id, data) => api.put(`/dicts/tags/${id}`, data),
   deleteTag: (id) => api.delete(`/dicts/tags/${id}`),
+
+  // 系统配置
+  getConfig: (key) => api.get('/dicts/config', { params: { key } }),
+  updateConfig: (key, value) => api.put('/dicts/config', { key, value }),
+}
+
+const batches = {
+  // 批次列表
+  getBatches: (params) => api.get('/batches', { params }),
+  // 批次详情
+  getBatch: (id) => api.get(`/batches/${id}`),
+  // 创建批次
+  createBatch: (data) => api.post('/batches', data),
+  // 触发成本分摊
+  allocateBatch: (id) => api.post(`/batches/${id}/allocate`),
 }
 
 const items = {
@@ -130,26 +157,69 @@ const sales = {
   getSales: (params) => api.get('/sales', { params }),
   // 创建销售记录
   createSale: (data) => api.post('/sales', data),
+  // 创建套装销售
+  createBundleSale: (data) => api.post('/sales/bundle', data),
+}
+
+const customers = {
+  // 客户列表
+  getCustomers: (params) => api.get('/customers/', { params }),
+  // 创建客户
+  createCustomer: (data) => api.post('/customers/', data),
+  // 编辑客户
+  updateCustomer: (id, data) => api.put(`/customers/${id}`, data),
+  // 获取客户详情（含购买记录）
+  getCustomerDetail: (id) => api.get(`/customers/${id}`),
+}
+
+const suppliers = {
+  // 供应商列表
+  getSuppliers: (params) => api.get('/suppliers/', { params }),
 }
 
 const dashboard = {
+  // 概览数据
+  getDashboardSummary: (params) => api.get('/dashboard/summary', { params }),
+  // 批次利润分析
+  getBatchProfit: (params) => api.get('/dashboard/profit/by-batch', { params }),
   // 按品类利润
   getProfitByCategory: (params) => api.get('/dashboard/profit/by-category', { params }),
   // 按渠道利润
   getProfitByChannel: (params) => api.get('/dashboard/profit/by-channel', { params }),
   // 销售趋势
-  getSalesTrend: (params) => api.get('/dashboard/trend', { params }),
+  getTrend: (params) => api.get('/dashboard/trend', { params }),
   // 压货预警
   getStockAging: (params) => api.get('/dashboard/stock-aging', { params }),
-  // 概览数据
+  // 兼容别名
   getSummary: (params) => api.get('/dashboard/summary', { params }),
+  getSalesTrend: (params) => api.get('/dashboard/trend', { params }),
+}
+
+const metal = {
+  // 获取当前市价（只显示有 cost_per_gram 的材质）
+  getCurrentPrices: () => api.get('/metal-prices'),
+  // 更新贵金属市价
+  updatePrice: (material_id, data) => api.put(`/metal-prices/${material_id}`, data),
+  // 获取历史记录
+  getPriceHistory: (params) => api.get('/metal-prices/history', { params }),
+  // 预览批量调价
+  previewReprice: (data) => api.post('/metal-prices/reprice', data),
+  // 确认批量调价
+  confirmReprice: (data) => api.post('/metal-prices/reprice/confirm', data),
+  // 向后兼容的别名
+  getMetalPrices: (params) => api.get('/metal-prices/history', { params }), // 历史记录
+  updateMetalPrice: (data) => api.post('/metal-prices', data), // 旧版本，不推荐
 }
 
 export default {
   dicts,
+  batches,
   items,
   sales,
+  customers,
+  suppliers,
   dashboard,
+  metal,
   // 原始axios实例（特殊情况使用）
   instance: api,
 }

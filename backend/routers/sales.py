@@ -64,6 +64,7 @@ def _to_sale_out(record: SaleRecord) -> SaleRecordOut:
         bundle_id=record.bundle_id,
         note=record.note,
         created_at=record.created_at,
+        cost=round(cost, 2),
         gross_profit=round(gross_profit, 2),
     )
 
@@ -107,6 +108,7 @@ def _to_bundle_out(bundle: BundleSale) -> BundleSaleOut:
             bundle_id=record.bundle_id,
             note=record.note,
             created_at=record.created_at,
+            cost=round(cost, 2),
             gross_profit=round(gross_profit, 2),
         )
         sale_records_out.append(sale_out)

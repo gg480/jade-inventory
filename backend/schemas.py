@@ -516,6 +516,7 @@ class SaleOut(BaseModel):
     note: Optional[str]
     created_at: datetime.datetime
     # 计算字段
+    cost: float = Field(description="成本 = 分摊成本（通货）或进价（高货）")
     gross_profit: float = Field(description="毛利 = 实际成交价 - 分摊成本")
 
 
