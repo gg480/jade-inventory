@@ -4,10 +4,25 @@
 
     <!-- 当前市价列表 -->
     <div class="mb-8">
-      <div class="flex justify-between items-center mb-4">
+      <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
         <h2 class="text-lg font-semibold text-gray-800">当前市价</h2>
-        <div class="text-sm text-gray-500">
-          只显示贵金属材质（有克重单价的材质）
+        <div class="flex items-center gap-3">
+          <!-- 自动抓取按钮 -->
+          <button
+            @click="handleAutoFetch"
+            :disabled="loading.autoFetch"
+            class="btn btn-primary text-sm"
+          >
+            <span v-if="loading.autoFetch" class="inline-block animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-1"></span>
+            {{ loading.autoFetch ? '抓取中...' : '从网络获取实时报价' }}
+          </button>
+          <!-- 最近抓取状态 -->
+          <span v-if="fetchStatus.last_fetch_time" class="text-xs text-gray-400">
+            上次抓取：{{ fetchStatus.last_fetch_time }}
+            <span :class="fetchStatus.last_fetch_status === '成功' ? 'text-green-500' : 'text-orange-500'">
+              ({{ fetchStatus.last_fetch_status }})
+            </span>
+          </span>
         </div>
       </div>
 
@@ -325,7 +340,15 @@ const loading = ref({
   currentPrices: false,
   history: false,
   update: false,
-  confirm: false
+  confirm: false,
+  autoFetch: false
+})
+
+// 自动抓取状态
+const fetchStatus = ref({
+  last_fetch_time: '',
+  last_fetch_status: '',
+  auto_fetch_enabled: false
 })
 
 // 历史记录筛选
@@ -338,7 +361,37 @@ const historyFilter = ref({
 onMounted(() => {
   fetchCurrentPrices()
   fetchPriceHistory()
+  loadFetchStatus()
 })
+
+// 加载抓取状态
+async function loadFetchStatus() {
+  try {
+    const data = await api.metal.getFetchStatus()
+    fetchStatus.value = data || {}
+  } catch (e) {
+    // 静默处理
+  }
+}
+
+// 自动获取实时报价
+async function handleAutoFetch() {
+  loading.value.autoFetch = true
+  try {
+    const result = await api.metal.fetchPrices()
+    // 刷新数据
+    await Promise.all([fetchCurrentPrices(), fetchPriceHistory(), loadFetchStatus()])
+    if (result.summary?.success_count > 0) {
+      toast.success(`成功获取 ${result.summary.success_count} 种贵金属报价`)
+    } else {
+      toast.error('获取失败，可能是网络问题或接口异常')
+    }
+  } catch (error) {
+    toast.error('自动获取报价失败: ' + (error.message || ''))
+  } finally {
+    loading.value.autoFetch = false
+  }
+}
 
 // 获取当前市价
 async function fetchCurrentPrices() {
@@ -535,6 +588,10 @@ function formatDateTime(dateTimeStr) {
 
 .btn-success {
   @apply bg-green-600 text-white hover:bg-green-700 focus:ring-green-500;
+}
+
+.btn-primary {
+  @apply bg-emerald-600 text-white hover:bg-emerald-700 focus:ring-emerald-500;
 }
 
 .btn:disabled {

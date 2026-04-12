@@ -238,6 +238,10 @@ const metal = {
   previewReprice: (data) => api.post('/metal-prices/reprice', data),
   // 确认批量调价
   confirmReprice: (data) => api.post('/metal-prices/reprice/confirm', data),
+  // 自动获取实时价格（新浪财经）
+  fetchPrices: () => api.get('/metal-prices/fetch'),
+  // 获取最近一次自动抓取状态
+  getFetchStatus: () => api.get('/metal-prices/fetch-status'),
   // 向后兼容的别名
   getMetalPrices: (params) => api.get('/metal-prices/history', { params }), // 历史记录
   updateMetalPrice: (data) => api.post('/metal-prices', data), // 旧版本，不推荐
