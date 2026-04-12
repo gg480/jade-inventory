@@ -274,6 +274,7 @@ def batch_create_items(
             material_id=body.material_id,
             type_id=body.type_id,
             cost_price=body.cost_price,
+            allocated_cost=body.cost_price,  # 高货：分摊成本 = 进价
             selling_price=body.selling_price,
             supplier_id=body.supplier_id,
             purchase_date=body.purchase_date,
@@ -281,6 +282,7 @@ def batch_create_items(
         )
         item.tags = tags
         db.add(item)
+        db.flush()  # 确保 item.id 已生成，供 ItemSpec.item_id 使用
         created.append(item)
 
         # 如果提供了 weight 或 size，创建规格记录
@@ -361,7 +363,9 @@ def create_item(
         # 高货：cost_price 必填
         if body.cost_price is None:
             raise HTTPException(status_code=400, detail="高货必须填写进价（cost_price）")
-        allocated_cost = body.cost_price
+        allocated_cost = body.cost_price  # 高货的分摊成本等于进价
+
+    # 通货：allocated_cost 初始为 None，等分摊算法填充
 
     # 4. 标签解析
     tags = _resolve_tags(body.tag_ids, db)

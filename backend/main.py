@@ -2,6 +2,7 @@
 FastAPI 应用入口 — 注册路由、中间件、生命周期钩子和静态文件托管。
 """
 
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -70,20 +71,30 @@ async def not_found_handler(request: Request, exc: HTTPException):
     return FileResponse("static/index.html")
 
 
-# ── CORS（开发阶段允许所有来源，生产可收窄到实际域名）──
+# ── CORS（通过环境变量配置允许的来源，默认开发模式允许所有）──
+_CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*")
+_origins_list = _CORS_ORIGINS.split(",") if _CORS_ORIGINS != "*" else ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 调试中间件：记录请求路径
+# 调试中间件：仅在 DEBUG=true 时记录请求路径
+_DEBUG_MODE = os.getenv("DEBUG", "").lower() == "true"
+
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    print(f"Request: {request.method} {request.url.path}")
-    response = await call_next(request)
+    if _DEBUG_MODE:
+        import time
+        start = time.time()
+        response = await call_next(request)
+        duration = time.time() - start
+        print(f"[{response.status_code}] {request.method} {request.url.path} - {duration:.3f}s")
+    else:
+        response = await call_next(request)
     return response
 
 # ── API 路由（统一前缀 /api/v1）──

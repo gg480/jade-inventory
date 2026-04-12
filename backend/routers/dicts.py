@@ -48,14 +48,6 @@ def list_materials(
     if not include_inactive:
         q = q.filter(DictMaterial.is_active == True)
     materials = q.order_by(DictMaterial.sort_order, DictMaterial.id).all()
-    # 调试：打印第一个材质的属性
-    if materials:
-        m = materials[0]
-        print(f"[DEBUG] First material: id={m.id}, name={m.name}, sub_type={m.sub_type}, origin={m.origin}, cost_per_gram={m.cost_per_gram}")
-        print(f"[DEBUG] Material object dict: {m.__dict__ if hasattr(m, '__dict__') else 'no __dict__'}")
-        # 测试序列化
-        out = DictMaterialOut.model_validate(m)
-        print(f"[DEBUG] Serialized dict: {out.model_dump()}")
     return ApiResponse(data=[DictMaterialOut.model_validate(m) for m in materials])
 
 
@@ -73,10 +65,8 @@ def create_material(
     if db.query(DictMaterial).filter(DictMaterial.name == body.name).first():
         raise HTTPException(
             status_code=400,
-            detail={"code": 400, "message": f"材质「{body.name}」已存在"}
+            detail=f"材质「{body.name}」已存在"
         )
-    print(f"[DEBUG] Creating material: name={body.name}, sub_type={body.sub_type}, origin={body.origin}, cost_per_gram={body.cost_per_gram}, sort_order={body.sort_order}")
-    print(f"[DEBUG] Body dict: {body.model_dump()}")
     m = DictMaterial(
         name=body.name,
         sub_type=body.sub_type,
@@ -109,7 +99,7 @@ def update_material(
         if db.query(DictMaterial).filter(DictMaterial.name == body.name).first():
             raise HTTPException(
                 status_code=400,
-                detail={"code": 400, "message": f"材质「{body.name}」已存在"}
+                detail=f"材质「{body.name}」已存在"
             )
         m.name = body.name
     if body.sub_type is not None:
@@ -179,7 +169,7 @@ def create_type(
     if db.query(DictType).filter(DictType.name == body.name).first():
         raise HTTPException(
             status_code=400,
-            detail={"code": 400, "message": f"器型「{body.name}」已存在"}
+            detail=f"器型「{body.name}」已存在"
         )
     t = DictType(
         name=body.name,
@@ -210,7 +200,7 @@ def update_type(
         if db.query(DictType).filter(DictType.name == body.name).first():
             raise HTTPException(
                 status_code=400,
-                detail={"code": 400, "message": f"器型「{body.name}」已存在"}
+                detail=f"器型「{body.name}」已存在"
             )
         t.name = body.name
     if body.spec_fields is not None:
@@ -278,7 +268,7 @@ def create_tag(
     if db.query(DictTag).filter(DictTag.name == body.name).first():
         raise HTTPException(
             status_code=400,
-            detail={"code": 400, "message": f"标签「{body.name}」已存在"}
+            detail=f"标签「{body.name}」已存在"
         )
     tag = DictTag(name=body.name, group_name=body.group_name, is_active=True)
     db.add(tag)
@@ -308,7 +298,7 @@ def update_tag(
         ):
             raise HTTPException(
                 status_code=400,
-                detail={"code": 400, "message": f"标签「{body.name}」已存在"}
+                detail=f"标签「{body.name}」已存在"
             )
         tag.name = body.name
     if body.group_name is not None:

@@ -80,7 +80,15 @@ async function fetchSalesTrend() {
 async function fetchStockAging() {
   loading.value.aging = true
   try {
-    stockAging.value = await api.dashboard.getStockAging({ min_days: filters.value.min_days })
+    const response = await api.dashboard.getStockAging({ min_days: filters.value.min_days })
+    // API 返回 { items: [...], total_items, total_value }
+    if (response && Array.isArray(response.items)) {
+      stockAging.value = response.items
+    } else if (Array.isArray(response)) {
+      stockAging.value = response
+    } else {
+      stockAging.value = []
+    }
   } catch (error) {
     console.error('获取压货预警失败:', error)
   } finally {
@@ -100,13 +108,13 @@ function refreshAll() {
 // 计算品类利润最大值（用于图表）
 const categoryMaxProfit = computed(() => {
   if (profitByCategory.value.length === 0) return 0
-  return Math.max(...profitByCategory.value.map(item => item.gross_profit))
+  return Math.max(...profitByCategory.value.map(item => item.profit))
 })
 
 // 计算渠道利润最大值
 const channelMaxProfit = computed(() => {
   if (profitByChannel.value.length === 0) return 0
-  return Math.max(...profitByChannel.value.map(item => item.gross_profit))
+  return Math.max(...profitByChannel.value.map(item => item.profit))
 })
 
 // 渠道显示名称
@@ -153,23 +161,23 @@ onMounted(() => {
     <div v-if="summary" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
       <div class="card text-center">
         <div class="text-sm text-gray-500">在库货品</div>
-        <div class="text-2xl font-bold text-gray-900 mt-1">{{ summary.total_stock }}</div>
+        <div class="text-2xl font-bold text-gray-900 mt-1">{{ summary.total_items }}</div>
         <div class="text-xs text-gray-500 mt-1">占用资金 ¥{{ summary.total_stock_value.toFixed(2) }}</div>
       </div>
       <div class="card text-center">
         <div class="text-sm text-gray-500">本月销售</div>
-        <div class="text-2xl font-bold text-jade-600 mt-1">¥{{ summary.monthly_revenue.toFixed(2) }}</div>
-        <div class="text-xs text-gray-500 mt-1">{{ summary.monthly_sales_count }} 件，毛利 ¥{{ summary.monthly_profit.toFixed(2) }}</div>
+        <div class="text-2xl font-bold text-jade-600 mt-1">¥{{ summary.month_revenue.toFixed(2) }}</div>
+        <div class="text-xs text-gray-500 mt-1">{{ summary.month_sold_count }} 件，毛利 ¥{{ summary.month_profit.toFixed(2) }}</div>
       </div>
       <div class="card text-center">
-        <div class="text-sm text-gray-500">借出中</div>
-        <div class="text-2xl font-bold text-blue-600 mt-1">{{ summary.lent_out_count }}</div>
-        <div class="text-xs text-gray-500 mt-1">待售货品</div>
+        <div class="text-sm text-gray-500">在库货品</div>
+        <div class="text-2xl font-bold text-blue-600 mt-1">{{ summary.total_items }}</div>
+        <div class="text-xs text-gray-500 mt-1">占用资金 ¥{{ summary.total_stock_value.toFixed(2) }}</div>
       </div>
       <div class="card text-center">
-        <div class="text-sm text-gray-500">压货预警</div>
-        <div class="text-2xl font-bold text-red-600 mt-1">{{ summary.overage_count }}</div>
-        <div class="text-xs text-gray-500 mt-1">占用 ¥{{ summary.overage_value.toFixed(2) }}</div>
+        <div class="text-sm text-gray-500">本月销售</div>
+        <div class="text-2xl font-bold text-red-600 mt-1">{{ summary.month_sold_count }} 件</div>
+        <div class="text-xs text-gray-500 mt-1">毛利 ¥{{ summary.month_profit.toFixed(2) }}</div>
       </div>
     </div>
 
@@ -196,19 +204,19 @@ onMounted(() => {
         <div v-for="item in profitByCategory" :key="item.material_id" class="border border-gray-200 rounded-lg p-4">
           <div class="flex items-center justify-between mb-2">
             <div class="font-medium text-gray-900">{{ item.material_name }}</div>
-            <div class="text-lg font-bold text-jade-600">¥{{ item.gross_profit.toFixed(2) }}</div>
+            <div class="text-lg font-bold text-jade-600">¥{{ item.profit.toFixed(2) }}</div>
           </div>
           <div class="flex items-center space-x-4 text-sm text-gray-600">
-            <span>销售额: ¥{{ item.total_revenue.toFixed(2) }}</span>
-            <span>成本: ¥{{ item.total_cost.toFixed(2) }}</span>
+            <span>销售额: ¥{{ item.revenue.toFixed(2) }}</span>
+            <span>成本: ¥{{ item.cost.toFixed(2) }}</span>
             <span>件数: {{ item.sales_count }}</span>
-            <span class="font-medium text-blue-600">毛利率: {{ (item.gross_margin * 100).toFixed(1) }}%</span>
+            <span class="font-medium text-blue-600">毛利率: {{ (item.profit_margin * 100).toFixed(1) }}%</span>
           </div>
           <div class="mt-2">
             <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
               <div
                 class="h-full bg-jade-500"
-                :style="{ width: `${item.gross_profit / categoryMaxProfit * 100}%` }"
+                :style="{ width: `${categoryMaxProfit > 0 ? (item.profit / categoryMaxProfit * 100) : 0}%` }"
               ></div>
             </div>
           </div>
@@ -238,18 +246,18 @@ onMounted(() => {
               }">
                 {{ channelName(item.channel) }}
               </span>
-              <div class="text-lg font-bold text-jade-600">¥{{ item.gross_profit.toFixed(2) }}</div>
+              <div class="text-lg font-bold text-jade-600">¥{{ item.profit.toFixed(2) }}</div>
             </div>
             <div class="flex items-center space-x-4 text-sm text-gray-600">
-              <span>销售额: ¥{{ item.total_revenue.toFixed(2) }}</span>
+              <span>销售额: ¥{{ item.revenue.toFixed(2) }}</span>
               <span>件数: {{ item.sales_count }}</span>
-              <span class="font-medium text-blue-600">毛利率: {{ (item.gross_margin * 100).toFixed(1) }}%</span>
+              <span class="font-medium text-blue-600">毛利率: {{ (item.profit_margin * 100).toFixed(1) }}%</span>
             </div>
             <div class="mt-2">
               <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
                 <div
                   class="h-full bg-jade-500"
-                  :style="{ width: `${item.gross_profit / channelMaxProfit * 100}%` }"
+                  :style="{ width: `${channelMaxProfit > 0 ? (item.profit / channelMaxProfit * 100) : 0}%` }"
                 ></div>
               </div>
             </div>
@@ -280,10 +288,10 @@ onMounted(() => {
           <div v-for="item in salesTrend" :key="item.year_month" class="border border-gray-200 rounded-lg p-3">
             <div class="flex items-center justify-between mb-1">
               <div class="font-medium text-gray-900">{{ item.year_month }}</div>
-              <div class="text-sm font-bold text-jade-600">毛利 ¥{{ item.gross_profit.toFixed(2) }}</div>
+              <div class="text-sm font-bold text-jade-600">毛利 ¥{{ item.profit.toFixed(2) }}</div>
             </div>
             <div class="flex items-center space-x-4 text-sm text-gray-600">
-              <span>销售额: ¥{{ item.total_revenue.toFixed(2) }}</span>
+              <span>销售额: ¥{{ item.revenue.toFixed(2) }}</span>
               <span>销量: {{ item.sales_count }}</span>
             </div>
           </div>
@@ -332,7 +340,7 @@ onMounted(() => {
           </table>
         </div>
         <div class="mt-4 pt-4 border-t border-gray-200 text-sm text-gray-600">
-          共 {{ stockAging.length }} 件压货，占用资金 ¥{{ stockAging.reduce((sum, item) => sum + item.cost_price, 0).toFixed(2) }}
+          共 {{ stockAging.length }} 件压货，占用资金 ¥{{ stockAging.reduce((sum, item) => sum + (item.allocated_cost || item.cost_price || 0), 0).toFixed(2) }}
         </div>
       </div>
     </div>

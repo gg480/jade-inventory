@@ -184,6 +184,13 @@ class SupplierOut(BaseModel):
     is_active: bool
 
 
+class SupplierListOut(BaseModel):
+    """供应商分页列表响应体"""
+
+    items: List[SupplierOut]
+    pagination: PaginationMeta
+
+
 class CustomerCreate(BaseModel):
     """新增客户请求体"""
 
@@ -234,7 +241,7 @@ class BatchCreate(BaseModel):
     material_id: int = Field(description="材质ID")
     type_id: Optional[int] = Field(default=None, description="器型ID")
     quantity: int = Field(description="总数量")
-    total_cost: float = Field(description="批次总进价")
+    total_cost: float = Field(description="批次总进价", gt=0)
     cost_alloc_method: str = Field(description="成本分摊算法: equal / by_weight / by_price")
     supplier_id: Optional[int] = Field(default=None, description="供货商ID")
     purchase_date: Optional[datetime.date] = Field(default=None, description="进货日期")
@@ -363,7 +370,7 @@ class ItemBatchCreate(BaseModel):
     quantity: int = Field(ge=1, description="入库数量")
     batch_code: Optional[str] = Field(default=None, max_length=50, description="批次编号（可选）")
     cost_price: Optional[float] = Field(default=None, description="高货进价（通货此字段为空）")
-    selling_price: float = Field(description="零售价/标价")
+    selling_price: float = Field(description="零售价/标价", gt=0)
     weight: Optional[float] = Field(default=None, description="总克重")
     size: Optional[str] = Field(default=None, max_length=100, description="通用尺寸描述")
     purchase_date: Optional[datetime.date] = Field(default=None, description="进货日期")
@@ -379,7 +386,7 @@ class ItemCreate(BaseModel):
     material_id: int = Field(description="材质ID")
     type_id: Optional[int] = Field(default=None, description="器型ID")
     cost_price: Optional[float] = Field(default=None, description="高货进价（通货此字段为空）")
-    selling_price: float = Field(description="零售价/标价")
+    selling_price: float = Field(description="零售价/标价", gt=0)
     floor_price: Optional[float] = Field(default=None, description="底价（最低可接受价）")
     origin: Optional[str] = Field(default=None, max_length=100, description="产地")
     counter: Optional[int] = Field(default=None, description="柜台号")
@@ -490,11 +497,26 @@ class SaleCreate(BaseModel):
     """单件销售请求体"""
 
     item_id: int = Field(description="货品ID")
-    actual_price: float = Field(description="实际成交价")
+    actual_price: float = Field(description="实际成交价", gt=0)
     channel: str = Field(description="销售渠道: store / wechat")
     sale_date: datetime.date = Field(description="销售日期")
     customer_id: Optional[int] = Field(default=None, description="客户ID")
     note: Optional[str] = Field(default=None, description="备注")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "examples": [
+                {
+                    "item_id": 1,
+                    "actual_price": 1500.00,
+                    "channel": "store",
+                    "sale_date": "2026-04-12",
+                    "customer_id": 1,
+                    "note": "现金交易"
+                }
+            ]
+        }
+    )
 
 
 class SaleOut(BaseModel):
@@ -536,7 +558,7 @@ class BundleSaleCreate(BaseModel):
     """套装销售请求体"""
 
     item_ids: List[int] = Field(description="货品ID列表")
-    total_price: float = Field(description="套装总价")
+    total_price: float = Field(description="套装总价", gt=0)
     alloc_method: str = Field(description="价格分摊方法: by_ratio / chain_at_cost")
     channel: str = Field(description="销售渠道")
     sale_date: datetime.date = Field(description="销售日期")

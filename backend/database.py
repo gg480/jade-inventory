@@ -8,8 +8,12 @@ import os
 from pathlib import Path
 from typing import Generator
 
+import logging
+
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+
+logger = logging.getLogger(__name__)
 
 # 数据库路径配置
 _DEFAULT_DB_PATH = Path(__file__).parent.parent / "data" / "jade.db"
@@ -28,6 +32,8 @@ engine = create_engine(
     connect_args={"check_same_thread": False},  # SQLite 多线程需要
     echo=False,  # 生产时关闭 SQL 日志，调试时可改为 True
     future=True,  # 使用 SQLAlchemy 2.0 风格
+    pool_pre_ping=True,  # 连接前检测可用性
+    pool_recycle=3600,  # 1小时回收连接
 )
 
 # Session 工厂
@@ -79,10 +85,10 @@ def seed_data(session: Session) -> None:
     result = session.execute(text("SELECT COUNT(*) FROM dict_material"))
     count = result.scalar()
     if count and count > 0:
-        print(f"[seed_data] 数据库已有 {count} 条材质记录，跳过种子数据插入")
+        logger.info("[seed_data] 数据库已有 %s 条材质记录，跳过种子数据插入", count)
         return
 
-    print("[seed_data] 插入种子数据...")
+    logger.info("[seed_data] 插入种子数据...")
 
     # 导入模型（在函数内导入避免循环依赖）
     from models import SysConfig, DictMaterial, DictType, DictTag, MetalPrice
@@ -207,7 +213,7 @@ def seed_data(session: Session) -> None:
     session.add_all(metal_prices)
 
     session.commit()
-    print("[seed_data] 种子数据插入完成")
+    logger.info("[seed_data] 种子数据插入完成")
 
 
 def init_db() -> None:
@@ -217,20 +223,26 @@ def init_db() -> None:
     2. 插入种子数据（如果表为空）
 
     幂等：可安全重复调用。
+
+    注意：生产环境不使用 drop_all，表结构变更应通过 Alembic 迁移管理。
+    如需强制重建表结构，可设置环境变量 RESET_DB=true。
     """
     from models import Base  # 延迟导入，避免循环依赖
 
-    # 删除所有表（确保表结构与模型一致）
-    Base.metadata.drop_all(bind=engine)
-    # 创建所有表（根据 TECH_SPEC.md v2 的14张表）
+    # 仅在显式设置 RESET_DB=true 时才删除所有表（仅用于开发/调试）
+    if os.getenv("RESET_DB", "").lower() == "true":
+        logger.warning("[init_db] RESET_DB=true，将删除所有表并重建！")
+        Base.metadata.drop_all(bind=engine)
+
+    # 创建所有表（如果已存在则跳过，不会丢失数据）
     Base.metadata.create_all(bind=engine)
-    print(f"[init_db] 表结构创建/更新完成（基于 TECH_SPEC.md v2）")
+    logger.info("[init_db] 表结构创建/更新完成（基于 TECH_SPEC.md v2）")
 
     # 插入种子数据
     with SessionLocal() as session:
         seed_data(session)
 
-    print(f"[init_db] 数据库初始化完成：{DB_PATH}")
+    logger.info("[init_db] 数据库初始化完成：%s", DB_PATH)
 
 # ──────────────────────────────────────────────
 # 直接执行测试
