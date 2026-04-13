@@ -1,7 +1,7 @@
 version: "3.8"
 services:
   jade:
-    image: gg480/jade-inventory:latest
+    image: lrunningmjgoat/jadeinventory:latest
     container_name: jade-inventory
     ports:
       - "8080:8000"
