@@ -17,8 +17,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 复制后端代码
 COPY backend/ .
 
-# 复制前端构建产物
-COPY --from=frontend-builder /app/frontend/dist ./static
+# 复制前端构建产物（vite outDir 设置为 ../backend/static）
+COPY --from=frontend-builder /app/backend/static ./static
 
 # 数据目录
 RUN mkdir -p /app/data/images
