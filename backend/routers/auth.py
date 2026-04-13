@@ -1,6 +1,6 @@
 """
 认证路由 — 登录验证、修改密码、Token 校验。
-单用户模式：admin/admin123 为默认凭据。
+单用户模式：默认密码由环境变量 DEFAULT_ADMIN_PASSWORD 控制。
 """
 
 import os

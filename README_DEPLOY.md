@@ -173,7 +173,7 @@ docker compose up -d
 | `IMAGE_DIR` | `/app/data/images` | 商品图片存储目录 |
 | `CORS_ORIGINS` | `*` | 允许的跨域来源 |
 | `JWT_SECRET` | — | **必填** JWT 签名密钥（至少16位随机字符串） |
-| `DEFAULT_ADMIN_PASSWORD` | `admin123` | 首次启动时的管理员默认密码，建议修改
+| `DEFAULT_ADMIN_PASSWORD` | 系统内置 | 首次启动时的管理员默认密码，建议通过环境变量修改
 | `TZ` | — | 时区，建议设为 `Asia/Shanghai` |
 | `PYTHONUNBUFFERED` | `1` | Python 日志实时输出（容器内已预设） |
 
