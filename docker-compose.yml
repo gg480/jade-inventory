@@ -8,16 +8,14 @@ services:
     volumes:
       # 数据持久化：数据库 + 图片
       - ./data:/app/data
-      # 配置持久化
+      # 配置目录（备用，以后可通过文件读取配置）
       - ./config:/app/config
-    # 从 config/.env 读取配置（优先级高于下面的 environment）
-    env_file:
-      - ./config/.env
     environment:
-      # 默认值，会被 config/.env 覆盖
+      # ↓↓↓ 必改：改成你自己的随机字符串 ↓↓↓
+      - JWT_SECRET=change-this-to-a-random-string
+      # 以下一般不用改
       - DB_PATH=/app/data/jade.db
       - IMAGE_DIR=/app/data/images
       - CORS_ORIGINS=*
-      - JWT_SECRET=change-this-to-a-random-string
       - TZ=Asia/Shanghai
     restart: unless-stopped
