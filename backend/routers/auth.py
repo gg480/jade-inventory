@@ -24,12 +24,14 @@ from schemas import ApiResponse
 router = APIRouter(tags=["认证"])
 
 # ── 配置 ──
-JWT_SECRET = os.getenv("JWT_SECRET", "jade-inventory-secret-key-change-in-production")
+JWT_SECRET = os.getenv("JWT_SECRET", "")
+if not JWT_SECRET:
+    raise RuntimeError("环境变量 JWT_SECRET 未设置，请在 docker-compose.yml 或 .env 中配置")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_DAYS = int(os.getenv("JWT_EXPIRE_DAYS", "30"))
 
-# 默认密码（首次启动时写入数据库）
-DEFAULT_PASSWORD = "admin123"
+# 默认密码（首次启动时写入数据库，可通过环境变量覆盖）
+DEFAULT_PASSWORD = os.getenv("DEFAULT_ADMIN_PASSWORD", "admin123")
 
 
 # ── 密码工具函数 ──
@@ -75,6 +77,14 @@ def _is_default_password(db: Session) -> bool:
     if not config:
         return True
     return config.value.lower() != "true"
+
+
+def _warn_weak_secret() -> None:
+    """启动时检测 JWT_SECRET 是否为弱密钥，打印警告。"""
+    weak_secrets = ["change-this-to-a-random-string", "jade-inventory-secret-key-change-in-production", "secret", "test"]
+    if JWT_SECRET in weak_secrets or len(JWT_SECRET) < 16:
+        import sys
+        print("\033[93m⚠️  警告：JWT_SECRET 过于简单，请设置至少16位的随机字符串！\033[0m", file=sys.stderr)
 
 
 def _create_access_token(subject: str = "admin", expires_delta: Optional[timedelta] = None) -> str:

@@ -1,6 +1,6 @@
 # 翡翠库存管理系统 — 部署指南
 
-> Docker 镜像：`gg480/jade-inventory`
+> Docker 镜像：`lrunningmjgoat/jadeinventory`
 > 适用于极空间 NAS / 群晖 NAS / 任意支持 Docker 的设备
 
 ---
@@ -18,7 +18,7 @@
 点击 **「镜像」** 标签页 → 点击右上角 **「拉取」** 按钮 → 在输入框中填写：
 
 ```
-gg480/jade-inventory:latest
+lrunningmjgoat/jadeinventory:latest
 ```
 
 点击 **「确定」** 开始拉取，等待下载完成（约 200MB，首次需 2-5 分钟）。
@@ -27,14 +27,14 @@ gg480/jade-inventory:latest
 
 ### 3. 创建容器
 
-拉取完成后，在镜像列表中找到 `gg480/jade-inventory:latest`，点击右侧 **「创建容器」**。
+拉取完成后，在镜像列表中找到 `lrunningmjgoat/jadeinventory:latest`，点击右侧 **「创建容器」**。
 
 #### 3.1 基本设置
 
 | 设置项 | 值 |
 |--------|-----|
 | 容器名称 | `jade-inventory` |
-| 镜像 | `gg480/jade-inventory:latest` |
+| 镜像 | `lrunningmjgoat/jadeinventory:latest` |
 | 重启策略 | **始终重启**（unless-stopped） |
 
 #### 3.2 端口映射
@@ -87,7 +87,7 @@ http://你的NAS内网IP:8080
 
 例如：`http://192.168.1.100:8080`
 
-首次访问会自动创建数据库，使用默认管理员账号登录（账号: `admin`，密码: `admin123`），**请立即修改密码**。
+首次访问会自动创建数据库，使用默认管理员密码登录，**系统会强制要求你修改密码**。
 
 ---
 
@@ -109,7 +109,7 @@ cat > docker-compose.yml << 'EOF'
 version: "3.8"
 services:
   jade:
-    image: gg480/jade-inventory:latest
+    image: lrunningmjgoat/jadeinventory:latest
     container_name: jade-inventory
     ports:
       - "8080:8000"
@@ -119,7 +119,7 @@ services:
       - DB_PATH=/app/data/jade.db
       - IMAGE_DIR=/app/data/images
       - CORS_ORIGINS=*
-      - JWT_SECRET=change-this-to-a-random-string
+      - JWT_SECRET=<替换为你的随机密钥>
       - TZ=Asia/Shanghai
     restart: unless-stopped
 EOF
@@ -146,7 +146,7 @@ docker logs -f jade-inventory
 ### 极空间 NAS GUI 操作
 
 1. 打开 Docker 管理器 → **「镜像」** 标签
-2. 点击 **「拉取」** → 输入 `gg480/jade-inventory:latest`
+2. 点击 **「拉取」** → 输入 `lrunningmjgoat/jadeinventory:latest`
 3. 等待拉取完成后，进入 **「容器」** 标签
 4. 停止并删除旧的 `jade-inventory` 容器（**数据不会丢失**，因为挂载了目录）
 5. 基于新镜像重新创建容器（参考步骤 3，使用相同的设置）
@@ -172,7 +172,8 @@ docker compose up -d
 | `DB_PATH` | `/app/data/jade.db` | SQLite 数据库文件路径 |
 | `IMAGE_DIR` | `/app/data/images` | 商品图片存储目录 |
 | `CORS_ORIGINS` | `*` | 允许的跨域来源 |
-| `JWT_SECRET` | — | **必填** JWT 签名密钥 |
+| `JWT_SECRET` | — | **必填** JWT 签名密钥（至少16位随机字符串） |
+| `DEFAULT_ADMIN_PASSWORD` | `admin123` | 首次启动时的管理员默认密码，建议修改
 | `TZ` | — | 时区，建议设为 `Asia/Shanghai` |
 | `PYTHONUNBUFFERED` | `1` | Python 日志实时输出（容器内已预设） |
 

@@ -208,9 +208,9 @@ def seed_data(session: Session) -> None:
     ]
     session.add_all(configs)
 
-    # 5. 管理员默认密码（bcrypt hash of "admin123"）
+    # 5. 管理员默认密码（可通过环境变量覆盖，默认 admin123，首次登录强制修改）
     import bcrypt
-    _default_password = "admin123"
+    _default_password = os.getenv("DEFAULT_ADMIN_PASSWORD", "admin123")
     _hashed_password = bcrypt.hashpw(
         _default_password.encode("utf-8"), bcrypt.gensalt()
     ).decode("utf-8")

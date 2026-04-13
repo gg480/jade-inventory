@@ -343,9 +343,9 @@ INSERT INTO items (sku_code, name, material_id, selling_price, status, purchase_
 
 -- 4. 创建测试客户
 INSERT INTO customers (name, phone, wechat, created_at, updated_at) VALUES
-  ('张三', '13800138000', 'zhangsan_wechat', datetime('now'), datetime('now')),
-  ('李四', '13900139000', 'lisi_wechat', datetime('now'), datetime('now')),
-  ('王五', '13700137000', NULL, datetime('now'), datetime('now'));
+  ('张三', '13800000001', 'zhangsan_wechat', datetime('now'), datetime('now')),
+  ('李四', '13800000002', 'lisi_wechat', datetime('now'), datetime('now')),
+  ('王五', '13800000003', NULL, datetime('now'), datetime('now'));
 
 -- 5. 验证数据
 SELECT 
@@ -407,9 +407,9 @@ def prepare_test_data():
     
     # 4. 创建测试客户
     test_customers = [
-        ('张三', '13800138000', 'zhangsan_wechat'),
-        ('李四', '13900139000', 'lisi_wechat'),
-        ('王五', '13700137000', None),
+        ('张三', '13800000001', 'zhangsan_wechat'),
+        ('李四', '13800000002', 'lisi_wechat'),
+        ('王五', '13800000003', None),
     ]
     
     for name, phone, wechat in test_customers:

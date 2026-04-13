@@ -78,7 +78,7 @@ export const setupDefaultMocks = () => {
 
   // 客户API
   mockApi.customers.getCustomers.mockResolvedValue([
-    { id: 1, name: '测试客户', phone: '13800138000' },
+    { id: 1, name: '测试客户', phone: '13800000000' },
     { id: 2, name: '另一个客户', wechat: 'wechat123' }
   ])
 
