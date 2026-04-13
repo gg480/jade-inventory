@@ -6,15 +6,18 @@ services:
     ports:
       - "8080:8000"
     volumes:
-      # 数据持久化：数据库 + 上传图片都保存在本地 ./data 目录
-      # 极空间上映射路径示例：/vol1/1000/docker/jade-inventory/data:/app/data
+      # 数据持久化：数据库 + 图片
       - ./data:/app/data
+      # 配置持久化
+      - ./config:/app/config
+    # 从 config/.env 读取配置（优先级高于下面的 environment）
+    env_file:
+      - ./config/.env
     environment:
-      # ↓↓↓ 首次部署请修改 JWT_SECRET 为任意随机字符串 ↓↓↓
-      - JWT_SECRET=change-this-to-a-random-string
-      # ↓↓↓ 其他配置一般不用改 ↓↓↓
+      # 默认值，会被 config/.env 覆盖
       - DB_PATH=/app/data/jade.db
       - IMAGE_DIR=/app/data/images
       - CORS_ORIGINS=*
+      - JWT_SECRET=change-this-to-a-random-string
       - TZ=Asia/Shanghai
     restart: unless-stopped
