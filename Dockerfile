@@ -14,14 +14,21 @@ WORKDIR /app
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 复制后端代码
-COPY backend/ .
+# 复制后端代码到临时目录，再选择性复制，避免 backend/config/ 覆盖 /app/config 挂载点
+COPY backend/ /tmp/backend-src/
 
-# 复制前端构建产物（vite outDir 设置为 ../backend/static）
-COPY --from=frontend-builder /app/backend/static ./static
+# 复制后端代码（排除 config 子目录，因为它会和 volume 挂载点冲突）
+RUN cp -r /tmp/backend-src/* /app/ && \
+    cp -r /tmp/backend-src/.??* /app/ 2>/dev/null || true && \
+    rm -rf /tmp/backend-src /app/config
 
-# 数据目录 + 配置目录（volume 挂载点）
-RUN mkdir -p /app/data/images /app/config
+# 把配置模板放到不会被 volume 覆盖的安全路径
+RUN mkdir -p /app/templates
+COPY backend/config/env.template /app/templates/env.template
+
+# 持久化挂载点：data/ 和 config/
+# 首次启动时 main.py 从 /app/templates/env.template → /app/config/.env
+RUN mkdir -p /app/data/images /app/data/barcodes /app/config
 
 EXPOSE 8000
 

@@ -8,12 +8,10 @@ services:
     volumes:
       # 数据持久化：数据库 + 上传图片
       - ./data:/app/data
-      # 配置持久化：config/.env 会自动加载（可选，不用也能跑）
+      # 配置持久化：.env 由容器首次启动自动生成
       - ./config:/app/config
     environment:
-      # ↓↓↓ 必须设置：至少16位随机字符串 ↓↓↓
-      - JWT_SECRET=
-      # 以下一般不用改
+      # 固定的环境变量（不需要用户修改）
       - DB_PATH=/app/data/jade.db
       - IMAGE_DIR=/app/data/images
       - CORS_ORIGINS=*

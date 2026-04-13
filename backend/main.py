@@ -7,10 +7,38 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 
+# ── 首次启动：自动生成配置文件到持久化目录 ──
+def _ensure_config_files() -> None:
+    """
+    容器首次启动时，自动将内置配置模板写入 /app/config/ 目录。
+    如果 .env 已存在（用户之前修改过），则跳过，不覆盖用户配置。
+    这样 config/ 映射到本地后，用户可以在NAS文件管理中直接看到和编辑配置文件。
+    """
+    config_dir = Path("/app/config")
+    # 如果 config 目录不存在（未挂载 volume），则自动创建
+    config_dir.mkdir(parents=True, exist_ok=True)
+
+    env_file = config_dir / ".env"
+    # 模板放在 /app/templates/ 下，不会被 volume 挂载覆盖
+    template_file = Path("/app/templates/env.template")
+
+    if not env_file.exists() and template_file.exists():
+        import shutil
+        shutil.copy2(str(template_file), str(env_file))
+        print("[config] 首次启动：已从模板生成 config/.env，请编辑此文件配置 JWT_SECRET 等参数")
+
+    # 确保 data 目录也存在
+    data_dir = Path("/app/data")
+    data_dir.mkdir(parents=True, exist_ok=True)
+    (data_dir / "images").mkdir(parents=True, exist_ok=True)
+    (data_dir / "barcodes").mkdir(parents=True, exist_ok=True)
+
+_ensure_config_files()
+
 # ── 自动加载 /app/config/.env（必须放在所有业务模块导入之前）──
 def _load_config_env() -> None:
     """
-    尝试从 /app/config/.env 加载环境变量。
+    从 /app/config/.env 加载环境变量。
     文件不存在则跳过，不报错。
     格式：每行 KEY=VALUE，支持 # 注释和空行。
     仅对未设置的环境变量生效（不覆盖 docker-compose/environment 中已设置的值）。
