@@ -54,7 +54,7 @@ async function fetchBatch(batchId) {
   }
 }
 
-// 出库相关
+// 销售相关
 const showSaleDialog = ref(false)
 
 // 获取货品详情
@@ -124,14 +124,14 @@ function printLabel() {
   router.push(`/labels?ids=${route.params.id}`)
 }
 
-// 打开出库弹窗
+// 打开销售弹窗
 function openCheckoutModal() {
   showSaleDialog.value = true
 }
 
-// 处理出库成功
+// 处理销售成功
 function handleSaleSuccess() {
-  toast.success('出库成功！')
+  toast.success('销售成功！')
   fetchItem() // 刷新详情
 }
 
@@ -238,7 +238,7 @@ onMounted(() => {
             @click="openCheckoutModal"
             class="btn btn-success"
           >
-            销售出库
+            销售
           </button>
           <button
             v-if="item.status === 'in_stock'"
@@ -499,7 +499,7 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- 出库弹窗组件 -->
+    <!-- 销售弹窗组件 -->
     <SaleDialog
       :item="item"
       :visible="showSaleDialog"

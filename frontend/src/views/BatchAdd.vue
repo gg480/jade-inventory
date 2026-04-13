@@ -18,7 +18,7 @@
                :class="step === 2 ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'">
             2
           </div>
-          <div class="ml-2 font-medium">逐件录入</div>
+          <div class="ml-2 font-medium">录入货品</div>
         </div>
       </div>
     </div>
@@ -224,8 +224,84 @@
         </div>
       </div>
 
-      <!-- 货品录入表单（录够前显示） -->
-      <div v-if="itemsAdded < form.quantity && !showAllocationResult">
+      <!-- 录入模式切换（录够前显示） -->
+      <div v-if="itemsAdded < form.quantity && !showAllocationResult" class="mb-6 flex space-x-2">
+        <button
+          @click="inputMode = 'single'"
+          :class="inputMode === 'single' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'"
+          class="px-4 py-2 rounded-md text-sm font-medium"
+        >
+          逐件录入
+        </button>
+        <button
+          @click="inputMode = 'batch'"
+          :class="inputMode === 'batch' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'"
+          class="px-4 py-2 rounded-md text-sm font-medium"
+        >
+          快速批量（同价格多件）
+        </button>
+      </div>
+
+      <!-- 快速批量录入表单 -->
+      <div v-if="inputMode === 'batch' && itemsAdded < form.quantity && !showAllocationResult" class="bg-white shadow rounded-lg p-6 mb-6">
+        <h3 class="text-lg font-bold mb-2">快速批量录入</h3>
+        <p class="text-sm text-gray-500 mb-4">适用于同价格多件商品，输入统一售价和数量，一次性录入。</p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div>
+            <label class="block text-sm font-medium mb-1">
+              零售价 <span class="text-red-500">*</span>
+            </label>
+            <input
+              v-model.number="batchQuickForm.selling_price"
+              type="number"
+              step="0.01"
+              min="0.01"
+              required
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="统一售价"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">
+              录入数量 <span class="text-red-500">*</span>
+            </label>
+            <input
+              v-model.number="batchQuickForm.count"
+              type="number"
+              min="1"
+              :max="form.quantity - itemsAdded"
+              required
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="一次录入几件"
+            />
+            <p class="text-xs text-gray-400 mt-1">剩余可录 {{ form.quantity - itemsAdded }} 件</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">
+              商品名称（选填）
+            </label>
+            <input
+              v-model="batchQuickForm.name"
+              type="text"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="留空自动生成"
+            />
+          </div>
+        </div>
+        <div class="mt-6 flex justify-end">
+          <button
+            type="button"
+            @click="submitBatchQuick"
+            :disabled="submittingItem"
+            class="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {{ submittingItem ? '批量录入中...' : '一键录入' }}
+          </button>
+        </div>
+      </div>
+
+      <!-- 单件录入表单 -->
+      <div v-if="inputMode === 'single' && itemsAdded < form.quantity && !showAllocationResult">
         <form @submit.prevent="submitItem" class="bg-white shadow rounded-lg p-6 mb-6">
           <h3 class="text-lg font-bold mb-4">录入货品 {{ itemsAdded + 1 }}/{{ form.quantity }}</h3>
 
@@ -431,6 +507,16 @@ const submittingItem = ref(false)
 // 已添加货品数量
 const itemsAdded = ref(0)
 
+// 录入模式：single=逐件，batch=快速批量
+const inputMode = ref('single')
+
+// 快速批量录入表单
+const batchQuickForm = reactive({
+  selling_price: '',
+  count: '',
+  name: ''
+})
+
 // 分摊相关状态
 const showAllocationResult = ref(false)
 const allocating = ref(false)
@@ -482,7 +568,7 @@ const tags = ref([])
 // 计算属性
 const selectedMaterialName = computed(() => {
   const material = materials.value.find(m => m.id == form.material_id)
-  return material ? `${material.name}${material.sub_type ? ` (${material.sub_type})` : ''}` : ''
+  return material ? material.name + (material.sub_type ? ' (' + material.sub_type + ')' : '') : ''
 })
 
 const selectedTypeName = computed(() => {
@@ -651,7 +737,7 @@ async function submitBatch() {
 
   } catch (error) {
     console.error('创建批次失败:', error)
-    toast.error(`创建批次失败: ${error.message || '请检查输入数据'}`)
+    toast.error('创建批次失败: ' + (error.message || '请检查输入数据'))
   } finally {
     submitting.value = false
   }
@@ -672,10 +758,10 @@ async function submitItem() {
 
     // 自动生成SKU（批次ID + 序号）
     const itemNumber = itemsAdded.value + 1
-    const skuCode = `${form.batch_code}-${itemNumber.toString().padStart(3, '0')}`
+    const skuCode = form.batch_code + '-' + itemNumber.toString().padStart(3, '0')
 
     // 默认商品名称
-    const defaultName = itemForm.name || `${selectedMaterialName.value} ${selectedTypeName.value || '货品'}`
+    const defaultName = itemForm.name || (selectedMaterialName.value + ' ' + (selectedTypeName.value || '货品'))
 
     // 构造货品数据（简化版）
     const data = {
@@ -702,11 +788,11 @@ async function submitItem() {
     resetItemForm()
 
     // 成功提示（不再询问是否完成，录够后会显示触发分摊按钮）
-    toast.success(`货品添加成功！已录入 ${itemsAdded.value}/${form.quantity} 件。`)
+    toast.success('货品添加成功！已录入 ' + itemsAdded.value + '/' + form.quantity + ' 件。')
 
   } catch (error) {
     console.error('添加货品失败:', error)
-    toast.error(`添加货品失败: ${error.message || '请检查输入数据'}`)
+    toast.error('添加货品失败: ' + (error.message || '请检查输入数据'))
   } finally {
     submittingItem.value = false
   }
@@ -722,6 +808,71 @@ function resetItemForm() {
   batchSpecFields.value.forEach(field => {
     specForm[field.key] = ''
   })
+}
+
+// 快速批量录入：同价格多件
+async function submitBatchQuick() {
+  const count = parseInt(batchQuickForm.count)
+  const sellingPrice = parseFloat(batchQuickForm.selling_price)
+  const remaining = form.quantity - itemsAdded.value
+
+  if (!count || count < 1) {
+    toast.warning('请输入有效的录入数量')
+    return
+  }
+  if (count > remaining) {
+    toast.warning('最多只能录入 ' + remaining + ' 件，当前剩余 ' + remaining + ' 件')
+    return
+  }
+  if (!sellingPrice || sellingPrice <= 0) {
+    toast.warning('请输入有效的零售价')
+    return
+  }
+
+  submittingItem.value = true
+  let successCount = 0
+  let failCount = 0
+
+  for (let i = 0; i < count; i++) {
+    try {
+      const itemNumber = itemsAdded.value + 1
+      const skuCode = form.batch_code + '-' + itemNumber.toString().padStart(3, '0')
+      const defaultName = batchQuickForm.name || (selectedMaterialName.value + ' ' + (selectedTypeName.value || '货品'))
+
+      const data = {
+        sku_code: skuCode,
+        batch_id: batchId.value,
+        batch_code: form.batch_code,
+        material_id: parseInt(form.material_id),
+        selling_price: sellingPrice,
+        name: defaultName,
+      }
+
+      if (form.type_id) data.type_id = parseInt(form.type_id)
+
+      await api.items.createItem(data)
+      itemsAdded.value++
+      successCount++
+    } catch (error) {
+      failCount++
+      console.error('快速批量录入第 ' + (i + 1) + ' 件失败:', error)
+    }
+  }
+
+  if (successCount > 0) {
+    toast.success('成功录入 ' + successCount + ' 件！已录入 ' + itemsAdded.value + '/' + form.quantity + ' 件。')
+  }
+  if (failCount > 0) {
+    toast.error(failCount + ' 件录入失败')
+  }
+
+  if (itemsAdded.value >= form.quantity) {
+    batchQuickForm.selling_price = ''
+    batchQuickForm.count = ''
+    batchQuickForm.name = ''
+  }
+
+  submittingItem.value = false
 }
 
 // 触发成本分摊
@@ -743,7 +894,7 @@ async function triggerAllocation() {
 
   } catch (error) {
     console.error('触发成本分摊失败:', error)
-    toast.error(`成本分摊失败: ${error.message || '请稍后重试'}`)
+    toast.error('成本分摊失败: ' + (error.message || '请稍后重试'))
   } finally {
     allocating.value = false
   }

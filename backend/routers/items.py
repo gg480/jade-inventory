@@ -161,6 +161,14 @@ def _to_list_item(item: Item) -> ItemListItem:
     out.tags = [DictTagOut.model_validate(t) for t in item.tags]
     out.cover_image = _cover_filename(item)
     out.age_days = _age_days(item.purchase_date)
+
+    # 预估成本：通货货品尚未分摊时，显示预估成本（批次总价/批次数量）
+    if out.allocated_cost is None and item.batch_id is not None and item.batch is not None:
+        batch_qty = item.batch.quantity
+        batch_cost = item.batch.total_cost
+        if batch_qty and batch_qty > 0:
+            out.allocated_cost = round(batch_cost / batch_qty, 2)
+
     return out
 
 

@@ -95,7 +95,7 @@ const showManualAdd = ref(false)
       <div>
         <h1 class="text-xl md:text-2xl font-bold text-gray-900">标签打印</h1>
         <p class="text-sm text-gray-500 mt-1">
-          入库后打印条码标签，贴在货品上，方便后续扫码出库
+          入库后打印条码标签，贴在货品上，方便后续扫码销售
         </p>
       </div>
       <div class="flex items-center gap-2">
@@ -130,7 +130,7 @@ const showManualAdd = ref(false)
       <h3 class="mt-4 text-lg font-medium text-gray-700">标签打印</h3>
       <p class="mt-2 text-sm text-gray-500 max-w-md mx-auto">
         请从库存列表选择货品后打印，或点击「手动添加」输入SKU编号。
-        打印的标签包含条码和基本信息，扫码即可快速出库。
+        打印的标签包含条码和基本信息，扫码即可快速销售。
       </p>
 
       <!-- 手动添加表单 -->

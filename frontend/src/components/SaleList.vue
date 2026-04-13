@@ -29,7 +29,7 @@ const customerLoading = ref(false)
 async function fetchCustomers() {
   customerLoading.value = true
   try {
-    const data = await api.customers.getCustomers({ page: 1, size: 1000 })
+    const data = await api.customers.getCustomers({ page: 1, size: 500 })
     customers.value = data.items || data
   } catch (error) {
     console.error('获取客户列表失败:', error)

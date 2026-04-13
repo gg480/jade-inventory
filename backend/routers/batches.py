@@ -364,6 +364,22 @@ def allocate_batch_cost(
             detail=f"批次「{batch.batch_code}」下货品数量({len(items)})与批次数量({batch.quantity})不一致，请先录完货品",
         )
 
+    # 3.5 防重复分摊：检查是否已有货品被分摊过
+    already_allocated = [item for item in items if item.allocated_cost is not None]
+    if already_allocated:
+        raise HTTPException(
+            status_code=400,
+            detail=f"批次「{batch.batch_code}」已有 {len(already_allocated)} 件货品完成过成本分摊，不可重复分摊",
+        )
+
+    # 3.6 防已售修改：检查是否有已售出的货品
+    sold_items = [item for item in items if item.status == "sold"]
+    if sold_items:
+        raise HTTPException(
+            status_code=400,
+            detail=f"批次「{batch.batch_code}」有 {len(sold_items)} 件货品已售出，不可对已售批次进行成本分摊",
+        )
+
     # 4. 读取定价配置
     operating_cost_rate = _get_config_value(db, "operating_cost_rate", 0.05)
     markup_rate = _get_config_value(db, "markup_rate", 0.30)

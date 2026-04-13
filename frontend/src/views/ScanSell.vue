@@ -188,10 +188,10 @@ async function submitSale() {
       channel: saleForm.channel,
       sale_date: saleForm.sale_date,
       customer_id: saleForm.customer_id || undefined,
-      note: '扫码出库'
+      note: '扫码销售'
     })
 
-    toast.success(`出库成功！${itemData.value.sku_code}`)
+    toast.success(`销售成功！${itemData.value.sku_code}`)
     itemData.value = null
     saleForm.actual_price = ''
     scanningResult.value = ''
@@ -199,7 +199,7 @@ async function submitSale() {
     // 自动开始下一次扫描
     startScan()
   } catch (err) {
-    toast.error(err.message || '出库失败')
+    toast.error(err.message || '销售失败')
   } finally {
     saleLoading.value = false
   }
@@ -227,7 +227,7 @@ onUnmounted(() => {
         </svg>
       </button>
       <div>
-        <h1 class="text-lg font-bold">扫码出库</h1>
+        <h1 class="text-lg font-bold">扫码销售</h1>
         <p class="text-xs text-emerald-100">扫描条码快速记录销售</p>
       </div>
     </div>
@@ -424,7 +424,7 @@ onUnmounted(() => {
             class="w-full btn btn-success py-3 text-base font-bold"
           >
             <span v-if="saleLoading" class="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></span>
-            {{ saleLoading ? '处理中...' : '确认出库' }}
+            {{ saleLoading ? '处理中...' : '确认销售' }}
           </button>
           <button
             @click="startScan"

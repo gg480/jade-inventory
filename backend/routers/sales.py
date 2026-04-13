@@ -1,5 +1,5 @@
 """
-销售记录路由 — 出库登记与销售列表查询。
+销售记录路由 — 销售登记与销售列表查询。
 
 POST /sales 是核心业务操作，创建销售记录与更新货品状态在同一事务中完成，
 保证数据一致性：不会出现"有销售记录但货品仍显示在库"的情况。
@@ -201,10 +201,10 @@ def list_sales(
     "",
     response_model=ApiResponse[SaleRecordOut],
     status_code=status.HTTP_201_CREATED,
-    summary="创建销售记录（出库）",
+    summary="创建销售记录",
     description=(
         "登记一笔销售，同时将货品状态改为 sold。"
-        "已售货品不可重复出库。整个操作在单一事务中完成。"
+        "已售货品不可重复销售。整个操作在单一事务中完成。"
     ),
 )
 def create_sale(

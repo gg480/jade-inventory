@@ -113,7 +113,7 @@
                     class="block px-4 py-3 text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 rounded-t-md"
                     :class="{ 'bg-emerald-50 text-emerald-700': $route.path === '/scan' }"
                   >
-                    扫码出库
+                    扫码销售
                   </router-link>
                   <router-link
                     to="/labels"

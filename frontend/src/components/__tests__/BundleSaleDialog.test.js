@@ -31,7 +31,7 @@ describe('BundleSaleDialog', () => {
   })
 
   it('渲染基础信息', () => {
-    expect(wrapper.text()).toContain('套装出库')
+    expect(wrapper.text()).toContain('套装销售')
     expect(wrapper.text()).toContain('已选 2 件货品')
     expect(wrapper.text()).toContain('总标价：¥1200.00')
   })

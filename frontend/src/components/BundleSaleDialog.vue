@@ -172,7 +172,7 @@ async function submitForm() {
     emit('success')
     closeDialog()
   } catch (err) {
-    error.value = err.message || '套装出库失败'
+    error.value = err.message || '套装销售失败'
   } finally {
     loading.value = false
   }
@@ -215,7 +215,7 @@ onMounted(() => {
     >
       <!-- 头部 -->
       <div class="px-6 py-4 border-b border-gray-200">
-        <h3 class="text-lg font-semibold text-gray-900">套装出库</h3>
+        <h3 class="text-lg font-semibold text-gray-900">套装销售</h3>
         <p class="mt-1 text-sm text-gray-600">
           已选 {{ items.length }} 件货品
           <span v-if="totalRetailPrice > 0">
@@ -428,7 +428,7 @@ onMounted(() => {
               :disabled="loading"
             >
               <span v-if="loading" class="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></span>
-              {{ loading ? '处理中...' : '确认出库' }}
+              {{ loading ? '处理中...' : '确认销售' }}
             </button>
           </div>
         </form>

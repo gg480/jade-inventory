@@ -78,7 +78,7 @@ const routes = [
     path: '/scan',
     name: 'scan-sell',
     component: ScanSell,
-    meta: { title: '扫码出库' }
+    meta: { title: '扫码销售' }
   },
   {
     path: '/labels',

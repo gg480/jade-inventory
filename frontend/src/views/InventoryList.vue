@@ -59,11 +59,11 @@ const selectedItemsData = computed(() => {
   return items.value.filter(item => selectedItems.value.has(item.id))
 })
 
-// 出库弹窗相关
+// 销售弹窗相关
 const showSaleDialog = ref(false)
 const saleItem = ref(null)
 
-// 套装出库相关
+// 套装销售相关
 const showBundleSaleDialog = ref(false)
 
 // 获取字典数据
@@ -164,15 +164,15 @@ function toggleSelectAll() {
   }
 }
 
-// 打开出库弹窗
+// 打开销售弹窗
 function openSaleDialog(item) {
   saleItem.value = item
   showSaleDialog.value = true
 }
 
-// 出库成功回调
+// 销售成功回调
 function handleSaleSuccess() {
-  toast.success('出库成功！')
+  toast.success('销售成功！')
   showSaleDialog.value = false
   fetchItems()
 }
@@ -222,26 +222,26 @@ async function batchDelete() {
   }
 }
 
-// 打开套装出库对话框
+// 打开套装销售对话框
 function openBundleSaleDialog() {
   if (selectedItems.value.size < 2) {
-    toast.warning('请至少选择2件货品进行套装出库')
+    toast.warning('请至少选择2件货品进行套装销售')
     return
   }
 
   // 检查所有选中货品是否都在库
   const notInStockItems = selectedItemsData.value.filter(item => item.status !== 'in_stock')
   if (notInStockItems.length > 0) {
-    toast.warning(`以下货品不在库，无法出库：${notInStockItems.map(item => item.sku_code).join(', ')}`)
+    toast.warning(`以下货品不在库，无法销售：${notInStockItems.map(item => item.sku_code).join(', ')}`)
     return
   }
 
   showBundleSaleDialog.value = true
 }
 
-// 处理套装出库成功
+// 处理套装销售成功
 function handleBundleSaleSuccess() {
-  toast.success('套装出库成功！')
+  toast.success('套装销售成功！')
   fetchItems() // 刷新列表
   showBundleSaleDialog.value = false
 }
@@ -389,7 +389,7 @@ onMounted(() => {
       <div class="card text-center">
         <div class="text-sm text-gray-500">库存价值</div>
         <div class="text-2xl font-bold text-jade-600 mt-1">
-          ¥{{ items.reduce((sum, item) => sum + item.cost_price, 0).toFixed(2) }}
+          ¥{{ items.reduce((sum, item) => sum + (item.allocated_cost || item.cost_price || 0), 0).toFixed(2) }}
         </div>
         <div class="text-xs text-gray-500 mt-1">按进价计算</div>
       </div>
@@ -515,7 +515,7 @@ onMounted(() => {
             @click="openBundleSaleDialog"
             class="btn btn-success text-sm flex-1 sm:flex-none"
           >
-            套装出库
+            套装销售
           </button>
           <button
             v-if="selectedItems.size > 0"
@@ -599,7 +599,7 @@ onMounted(() => {
               <td>{{ item.name || item.sku_code }}</td>
               <td>{{ item.material_name }}</td>
               <td>{{ item.type_name || '-' }}</td>
-              <td class="text-right font-medium">¥{{ item.cost_price.toFixed(2) }}</td>
+              <td class="text-right font-medium">¥{{ (item.allocated_cost || item.cost_price || 0).toFixed(2) }}</td>
               <td class="text-right font-medium text-jade-600">¥{{ item.selling_price.toFixed(2) }}</td>
               <td>
                 <span :class="{
@@ -634,9 +634,9 @@ onMounted(() => {
                     v-if="item.status === 'in_stock'"
                     @click="openSaleDialog(item)"
                     class="text-jade-600 hover:text-jade-800 text-sm font-medium"
-                    title="销售出库"
+                    title="销售"
                   >
-                    出库
+                    销售
                   </button>
                   <button
                     v-if="item.status === 'in_stock'"
@@ -687,11 +687,15 @@ onMounted(() => {
             </span>
           </div>
 
-          <!-- 材质和售价 -->
-          <div class="grid grid-cols-2 gap-3">
+          <!-- 材质、成本和售价 -->
+          <div class="grid grid-cols-3 gap-3">
             <div>
               <div class="text-xs text-gray-500">材质</div>
               <div class="text-sm font-medium text-gray-900">{{ item.material_name }}</div>
+            </div>
+            <div>
+              <div class="text-xs text-gray-500">成本</div>
+              <div class="text-sm font-medium text-gray-900">¥{{ (item.allocated_cost || item.cost_price || 0).toFixed(2) }}</div>
             </div>
             <div>
               <div class="text-xs text-gray-500">售价</div>
@@ -711,7 +715,7 @@ onMounted(() => {
       />
     </div>
 
-    <!-- 单件出库弹窗 -->
+    <!-- 单件销售弹窗 -->
     <SaleDialog
       v-if="saleItem"
       :item="saleItem"
@@ -720,7 +724,7 @@ onMounted(() => {
       @success="handleSaleSuccess"
     />
 
-    <!-- 套装出库弹窗组件 -->
+    <!-- 套装销售弹窗组件 -->
     <BundleSaleDialog
       :items="selectedItemsData"
       :visible="showBundleSaleDialog"

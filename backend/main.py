@@ -7,43 +7,50 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 
+# ── 配置路径（支持环境变量覆盖，适配 Docker / 本地开发）──
+CONFIG_DIR = Path(os.getenv("CONFIG_DIR", "/app/config"))
+DATA_DIR_ROOT = Path(os.getenv("DATA_DIR", "/app/data"))
+TEMPLATE_DIR = Path(os.getenv("TEMPLATE_DIR", "/app/templates"))
+
+
 # ── 首次启动：自动生成配置文件到持久化目录 ──
 def _ensure_config_files() -> None:
     """
-    容器首次启动时，自动将内置配置模板写入 /app/config/ 目录。
+    容器首次启动时，自动将内置配置模板写入配置目录。
     如果 .env 已存在（用户之前修改过），则跳过，不覆盖用户配置。
     这样 config/ 映射到本地后，用户可以在NAS文件管理中直接看到和编辑配置文件。
     """
-    config_dir = Path("/app/config")
-    # 如果 config 目录不存在（未挂载 volume），则自动创建
-    config_dir.mkdir(parents=True, exist_ok=True)
+    # 如果 config 目录不存在，则自动创建
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
-    env_file = config_dir / ".env"
-    # 模板放在 /app/templates/ 下，不会被 volume 挂载覆盖
-    template_file = Path("/app/templates/env.template")
+    env_file = CONFIG_DIR / ".env"
+    # 模板放在 templates/ 下，不会被 volume 挂载覆盖
+    template_file = TEMPLATE_DIR / "env.template"
 
     if not env_file.exists() and template_file.exists():
         import shutil
         shutil.copy2(str(template_file), str(env_file))
-        print("[config] 首次启动：已从模板生成 config/.env，请编辑此文件配置 JWT_SECRET 等参数")
+        print("[config] 首次启动：已从模板生成 .env，请编辑此文件配置 JWT_SECRET 等参数")
 
     # 确保 data 目录也存在
-    data_dir = Path("/app/data")
-    data_dir.mkdir(parents=True, exist_ok=True)
-    (data_dir / "images").mkdir(parents=True, exist_ok=True)
-    (data_dir / "barcodes").mkdir(parents=True, exist_ok=True)
+    DATA_DIR_ROOT.mkdir(parents=True, exist_ok=True)
+    (DATA_DIR_ROOT / "images").mkdir(parents=True, exist_ok=True)
+    (DATA_DIR_ROOT / "barcodes").mkdir(parents=True, exist_ok=True)
 
-_ensure_config_files()
+try:
+    _ensure_config_files()
+except PermissionError:
+    print("[config] 跳过配置文件生成（无写入权限，可能为本地开发环境）")
 
-# ── 自动加载 /app/config/.env（必须放在所有业务模块导入之前）──
+# ── 自动加载 .env（必须放在所有业务模块导入之前）──
 def _load_config_env() -> None:
     """
-    从 /app/config/.env 加载环境变量。
+    从配置目录的 .env 加载环境变量。
     文件不存在则跳过，不报错。
     格式：每行 KEY=VALUE，支持 # 注释和空行。
     仅对未设置的环境变量生效（不覆盖 docker-compose/environment 中已设置的值）。
     """
-    env_path = Path("/app/config/.env")
+    env_path = CONFIG_DIR / ".env"
     if not env_path.exists():
         return
     try:
@@ -60,9 +67,12 @@ def _load_config_env() -> None:
                 if key and key not in os.environ:
                     os.environ[key] = value
     except Exception as e:
-        print(f"[config] 加载 config/.env 失败: {e}")
+        print(f"[config] 加载 .env 失败: {e}")
 
-_load_config_env()
+try:
+    _load_config_env()
+except Exception:
+    pass
 
 # ── 以下为正常的模块导入（此时 config/.env 已加载到 os.environ）──
 from fastapi import FastAPI, HTTPException, Request
@@ -97,7 +107,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="玉器店进销存系统",
-    description="珠宝玉器实体店进销存管理 API — 支持货品管理、销售出库和利润看板。",
+    description="珠宝玉器实体店进销存管理 API — 支持货品管理、销售管理和利润看板。",
     version="1.0.0",
     lifespan=lifespan,
 )

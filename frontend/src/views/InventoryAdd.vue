@@ -817,7 +817,7 @@ onMounted(async () => {
                   v-model="batchForm.quantity"
                   type="number"
                   min="1"
-                  max="500"
+                  max="9999"
                   class="form-input"
                   required
                 />

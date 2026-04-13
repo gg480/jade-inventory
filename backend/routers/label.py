@@ -1,7 +1,7 @@
 """
 标签打印路由 — 条码生成、标签数据查询、批量标签打印。
 
-核心流程：入库 → 打印标签（含 Code128 条码）→ 贴在货品上 → 手机扫码出库。
+核心流程：入库 → 打印标签（含 Code128 条码）→ 贴在货品上 → 手机扫码销售。
 技术方案：python-barcode 生成 Code128 条码 PNG，通过 API 返回 base64 供前端渲染打印。
 """
 
@@ -184,7 +184,7 @@ def get_barcode_image(
 @router.get(
     "/lookup",
     summary="SKU 扫码查询",
-    description="通过 SKU 编号查询货品信息，供手机扫码后快速获取货品详情并进入出库流程。",
+    description="通过 SKU 编号查询货品信息，供手机扫码后快速获取货品详情并进入销售流程。",
 )
 def lookup_by_sku(
     sku: str = Query(..., description="SKU 编号（扫描条码值）"),
