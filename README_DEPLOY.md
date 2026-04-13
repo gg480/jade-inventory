@@ -35,6 +35,10 @@
 
 在极空间文件管理中，创建 `/docker/jade-inventory/docker-compose.yml`，内容如下：
 
+> **重要**：极空间 NAS 的容器管理器**不支持相对路径**（`./data` 会解析到你看不到的系统内部目录），
+> 必须使用**绝对路径**。下面的 `/vol1/1000/docker/jade-inventory/` 是示例路径，
+> 请替换为你 NAS 上实际的文件夹路径（在极空间文件管理器中右键文件夹 →「详情」可查看真实路径）。
+
 ```yaml
 version: "3.8"
 services:
@@ -44,16 +48,16 @@ services:
     ports:
       - "8080:8000"
     volumes:
-      # 数据持久化：数据库 + 上传图片
-      - ./data:/app/data
-      # 配置持久化：.env 由容器首次启动自动生成
-      - ./config:/app/config
+      # ⚠️ 必须使用绝对路径！根据你的 NAS 实际目录修改。
+      - /vol1/1000/docker/jade-inventory/data:/app/data
+      - /vol1/1000/docker/jade-inventory/config:/app/config
     environment:
-      # 固定的环境变量（不需要修改）
       - DB_PATH=/app/data/jade.db
       - IMAGE_DIR=/app/data/images
       - CORS_ORIGINS=*
       - TZ=Asia/Shanghai
+      # JWT 签名密钥（已预生成，无需手动配置）
+      - JWT_SECRET=df5a125f076b7ea52a12fc6cf0eceb7efcf5764fa9bc65e00f4ca2adefccb11c
     restart: unless-stopped
 ```
 
@@ -70,21 +74,12 @@ config/
 └── .env    ← 自动生成的配置文件
 ```
 
-### 5. 配置 JWT_SECRET（必须）
+### 5. JWT_SECRET 已预配置（无需手动操作）
 
-在极空间文件管理中，打开 `config/.env`，找到这一行：
+`docker-compose.yml` 中的 `environment` 已包含预生成的随机 `JWT_SECRET`，
+容器启动时会自动生效，无需额外手动配置。
 
-```
-JWT_SECRET=please-change-this-to-a-random-string
-```
-
-改为一个随机字符串（至少16位），例如：
-
-```
-JWT_SECRET=a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6
-```
-
-修改后，重启容器让配置生效。
+如果将来需要更换密钥，修改 `docker-compose.yml` 中的 `JWT_SECRET` 值后重启容器即可。
 
 ### 6. 访问系统
 
@@ -140,13 +135,11 @@ lrunningmjgoat/jadeinventory:latest
 | `IMAGE_DIR` | `/app/data/images` |
 | `CORS_ORIGINS` | `*` |
 | `TZ` | `Asia/Shanghai` |
+| `JWT_SECRET` | `df5a125f076b7ea52a12fc6cf0eceb7efcf5764fa9bc65e00f4ca2adefccb11c` |
 
 ### 3. 启动后配置
 
-1. 启动容器后，在极空间文件管理中找到 `config/` 文件夹
-2. 打开自动生成的 `.env` 文件
-3. 修改 `JWT_SECRET` 为随机字符串
-4. 重启容器
+`JWT_SECRET` 已在环境变量中预配置，无需手动操作。容器启动后即可直接访问系统。
 
 ---
 
@@ -165,6 +158,7 @@ services:
     ports:
       - "8080:8000"
     volumes:
+      # 命令行部署可以用相对路径
       - ./data:/app/data
       - ./config:/app/config
     environment:
@@ -172,15 +166,12 @@ services:
       - IMAGE_DIR=/app/data/images
       - CORS_ORIGINS=*
       - TZ=Asia/Shanghai
+      - JWT_SECRET=df5a125f076b7ea52a12fc6cf0eceb7efcf5764fa9bc65e00f4ca2adefccb11c
     restart: unless-stopped
 EOF
 
 # 启动
 docker compose up -d
-
-# 等容器启动后，编辑配置
-nano config/.env  # 修改 JWT_SECRET
-docker compose restart
 ```
 
 ---
@@ -260,11 +251,14 @@ cp -r ~/backup/jade-20250101/* ~/jade-inventory/data/
 1. 检查容器是否正常运行
 2. 查看日志确认是否有报错
 3. 确认 8080 端口没有被其他服务占用
-4. 检查 `config/.env` 中 `JWT_SECRET` 是否已修改
+4. 检查 volume 挂载路径是否使用了绝对路径（极空间 NAS 不支持相对路径）
 
 ### Q: 数据丢失了？
 
-检查挂载目录是否正确配置。必须同时挂载 `/app/data` 和 `/app/config`。
+检查挂载目录是否正确配置：
+1. 极空间 NAS 必须使用**绝对路径**（如 `/vol1/1000/docker/jade-inventory/data`），不能用 `./data`
+2. 必须同时挂载 `/app/data` 和 `/app/config`
+3. 在极空间文件管理器中确认数据目录下有 `jade.db` 文件
 
 ### Q: 更新镜像后配置还在吗？
 
