@@ -72,8 +72,7 @@ def _to_sale_out(record: SaleRecord) -> SaleRecordOut:
 def _generate_sequential_no(
     prefix: str,
     date: datetime.date,
-    model_class,
-    no_field: str,
+    no_field,
     db: Session,
     label: str = "编号",
 ) -> str:
@@ -99,7 +98,7 @@ def _generate_sequential_no(
 
 def _generate_bundle_no(sale_date: datetime.date, db: Session) -> str:
     """生成套装销售编号：b20250410001 格式。"""
-    return _generate_sequential_no("b", sale_date, BundleSale, BundleSale.bundle_no, db, label="套装编号")
+    return _generate_sequential_no("b", sale_date, BundleSale.bundle_no, db, label="套装编号")
 
 
 def _to_bundle_out(bundle: BundleSale) -> BundleSaleOut:
@@ -233,7 +232,7 @@ def create_sale(
         raise HTTPException(status_code=400, detail=f"货品状态为「{item.status}」，不可销售")
 
     # 4. 生成销售单号 s20250410001 格式
-    sale_no = _generate_sequential_no("s", body.sale_date, SaleRecord, SaleRecord.sale_no, db, label="销售编号")
+    sale_no = _generate_sequential_no("s", body.sale_date, SaleRecord.sale_no, db, label="销售编号")
 
     # 5. 在同一事务中创建销售记录 + 更新货品状态
     record = SaleRecord(
@@ -398,7 +397,7 @@ def create_bundle_sale(
     # 为每件货品创建销售记录
     sale_records = []
     # 生成连续的销售编号（获取基础序号，后续逐件递增）
-    first_sale_no = _generate_sequential_no("s", body.sale_date, SaleRecord, SaleRecord.sale_no, db, label="销售编号")
+    first_sale_no = _generate_sequential_no("s", body.sale_date, SaleRecord.sale_no, db, label="销售编号")
     date_prefix = body.sale_date.strftime("%Y%m%d")
     next_seq = int(first_sale_no[len(f"s{date_prefix}"):])
 

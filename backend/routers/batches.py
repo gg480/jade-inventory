@@ -305,7 +305,12 @@ def update_batch(
 
     # 逐字段更新（None 表示未传，跳过）
     if body.batch_code is not None:
+        old_code = batch.batch_code
         batch.batch_code = body.batch_code
+        # Sync batch_code to all related items
+        db.query(Item).filter(Item.batch_id == batch_id).update(
+            {"batch_code": body.batch_code}, synchronize_session="fetch"
+        )
     if body.material_id is not None:
         batch.material_id = body.material_id
     if body.type_id is not None:

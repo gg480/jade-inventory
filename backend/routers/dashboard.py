@@ -10,12 +10,11 @@ import math
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import and_, func
+from sqlalchemy import and_, case, func, Integer
 from sqlalchemy.orm import Session, selectinload
 
 from database import get_db
 from models import Batch, DictMaterial, Item, SaleRecord, SysConfig
-from utils.batch_stats import compute_batch_stats
 from schemas import (
     ApiResponse,
     BatchProfitItem,
@@ -418,34 +417,84 @@ def get_batch_profit(
     status: Optional[str] = Query(None, description="按批次状态筛选：new / selling / paid_back / cleared"),
     db: Session = Depends(get_db),
 ) -> ApiResponse[List[BatchProfitItem]]:
-    # 构建基础查询
+    # Build base query
     query = db.query(Batch)
-
     if material_id is not None:
-        # 验证材质是否存在（可选）
         material = db.get(DictMaterial, material_id)
         if not material:
             raise HTTPException(status_code=404, detail="材质不存在")
         query = query.filter(Batch.material_id == material_id)
 
-    # 获取所有符合条件的批次
-    batches = query.order_by(Batch.created_at.desc()).all()
+    batches = query.options(selectinload(Batch.material)).order_by(Batch.created_at.desc()).all()
+
+    if not batches:
+        return ApiResponse(data=[])
+
+    batch_ids = [b.id for b in batches]
+
+    # Single aggregation query for all batches
+    batch_stats_rows = (
+        db.query(
+            Item.batch_id,
+            func.count(Item.id).label("items_count"),
+            func.sum(func.cast(Item.status == "sold", Integer)).label("sold_count"),
+            func.coalesce(func.sum(
+                case(
+                    (Item.status == "sold", SaleRecord.actual_price),
+                    else_=0
+                )
+            ), 0).label("revenue"),
+        )
+        .outerjoin(SaleRecord, SaleRecord.item_id == Item.id)
+        .filter(
+            Item.batch_id.in_(batch_ids),
+            Item.is_deleted == False,
+        )
+        .group_by(Item.batch_id)
+        .all()
+    )
+
+    # Build stats lookup
+    stats_map = {}
+    for row in batch_stats_rows:
+        items_count = row.items_count or 0
+        sold_count = row.sold_count or 0
+        revenue = float(row.revenue or 0)
+        batch = next(b for b in batches if b.id == row.batch_id)
+        profit = revenue - batch.total_cost
+        payback_rate = revenue / batch.total_cost if batch.total_cost > 0 else 0
+
+        # Determine status
+        if sold_count == 0:
+            batch_status = "new"
+        elif sold_count >= batch.quantity:
+            batch_status = "cleared"
+        elif payback_rate >= 1.0:
+            batch_status = "paid_back"
+        else:
+            batch_status = "selling"
+
+        stats_map[row.batch_id] = {
+            "items_count": items_count,
+            "sold_count": sold_count,
+            "revenue": round(revenue, 2),
+            "profit": round(profit, 2),
+            "payback_rate": round(payback_rate, 4),
+            "status": batch_status,
+        }
 
     result = []
     for batch in batches:
-        stats = compute_batch_stats(batch, db)
-
-        # 按状态筛选（如果提供了 status 参数）
+        stats = stats_map.get(batch.id, {
+            "items_count": 0, "sold_count": 0, "revenue": 0,
+            "profit": -batch.total_cost, "payback_rate": 0, "status": "new",
+        })
         if status is not None and stats["status"] != status:
             continue
-
-        # 获取材质名称
-        material_name = batch.material.name
-
         result.append(
             BatchProfitItem(
                 batch_code=batch.batch_code,
-                material_name=material_name,
+                material_name=batch.material.name,
                 total_cost=batch.total_cost,
                 quantity=batch.quantity,
                 sold_count=stats["sold_count"],
@@ -455,5 +504,4 @@ def get_batch_profit(
                 status=stats["status"],
             )
         )
-
     return ApiResponse(data=result)

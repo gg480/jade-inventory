@@ -26,7 +26,9 @@ router = APIRouter(tags=["认证"])
 # ── 配置 ──
 JWT_SECRET = os.getenv("JWT_SECRET", "")
 if not JWT_SECRET:
-    raise RuntimeError("环境变量 JWT_SECRET 未设置，请在 docker-compose.yml 或 .env 中配置")
+    import sys
+    print("\033[93m⚠️  警告：JWT_SECRET 未设置，使用不安全的默认值！请在 .env 或 docker-compose.yml 中配置。\033[0m", file=sys.stderr)
+    JWT_SECRET = "insecure-default-secret-please-change"
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_DAYS = int(os.getenv("JWT_EXPIRE_DAYS", "30"))
 
@@ -66,7 +68,6 @@ def _get_password_hash(db: Session) -> str:
             description="密码是否已从默认值修改",
         ))
         db.commit()
-        db.refresh(config)
         return hashed
     return config.value
 

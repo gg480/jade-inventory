@@ -395,18 +395,37 @@ def get_type_stats(
             .all()
         )
 
+        # Pre-load latest sale for each item (bulk query to avoid N+1)
         margins = []
-        for item in sold_items:
-            item_cost = item.allocated_cost if item.allocated_cost is not None else item.cost_price
-            if item_cost and item_cost > 0:
-                latest_sale = (
-                    db.query(SaleRecord)
-                    .filter(SaleRecord.item_id == item.id)
-                    .order_by(SaleRecord.sale_date.desc())
-                    .first()
+        if sold_items:
+            sold_item_ids = [it.id for it in sold_items]
+            latest_sales = (
+                db.query(
+                    SaleRecord.item_id,
+                    func.max(SaleRecord.sale_date).label("latest_date"),
                 )
-                if latest_sale:
-                    margin = (latest_sale.actual_price - item_cost) / item_cost * 100
+                .filter(SaleRecord.item_id.in_(sold_item_ids))
+                .group_by(SaleRecord.item_id)
+                .subquery()
+            )
+            latest_sale_records = (
+                db.query(SaleRecord)
+                .join(
+                    latest_sales,
+                    (SaleRecord.item_id == latest_sales.c.item_id) &
+                    (SaleRecord.sale_date == latest_sales.c.latest_date)
+                )
+                .all()
+            )
+            latest_sale_map = {}
+            for sr in latest_sale_records:
+                latest_sale_map[sr.item_id] = sr.actual_price
+
+            for item in sold_items:
+                item_cost = item.allocated_cost if item.allocated_cost is not None else item.cost_price
+                latest_price = latest_sale_map.get(item.id)
+                if item_cost and item_cost > 0 and latest_price:
+                    margin = (latest_price - item_cost) / item_cost * 100
                     margins.append(margin)
 
         avg_margin = sum(margins) / len(margins) if margins else None

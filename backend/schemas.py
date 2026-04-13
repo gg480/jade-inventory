@@ -550,9 +550,8 @@ class SaleOut(BaseModel):
     gross_profit: float = Field(description="毛利 = 实际成交价 - 分摊成本")
 
 
-class SaleRecordOut(SaleOut):
-    """销售记录响应体（别名）"""
-    pass
+# SaleRecordOut is an alias for SaleOut for backward compatibility
+SaleRecordOut = SaleOut
 
 
 class SaleRecordListOut(BaseModel):

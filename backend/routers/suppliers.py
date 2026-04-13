@@ -22,7 +22,7 @@ router = APIRouter(prefix="/suppliers", tags=["供应商管理"])
 # ══════════════════════════════════════════════
 
 @router.get(
-    "/",
+    "",
     response_model=ApiResponse[SupplierListOut],
     summary="获取供应商列表",
     description="支持按名称、联系方式搜索，默认只返回启用的供应商。支持分页。",
@@ -61,7 +61,7 @@ def list_suppliers(
 # ══════════════════════════════════════════════
 
 @router.post(
-    "/",
+    "",
     response_model=ApiResponse[SupplierOut],
     status_code=status.HTTP_201_CREATED,
     summary="新增供应商",

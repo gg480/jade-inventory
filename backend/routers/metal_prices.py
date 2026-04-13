@@ -10,6 +10,7 @@ import datetime
 import logging
 import re
 import urllib.request
+import asyncio
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -403,7 +404,7 @@ _MATERIAL_FETCH_MAP = {
     description="从新浪财经接口抓取黄金、白银、铂金实时价格，"
                 "写入 metal_prices 表并更新 sys_config 中的抓取状态。",
 )
-def fetch_metal_prices(db: Session = Depends(get_db)) -> ApiResponse:
+async def fetch_metal_prices(db: Session = Depends(get_db)) -> ApiResponse:
     """
     自动获取贵金属实时价格。
     数据源：新浪财经接口（免费，无需 API Key）
@@ -427,8 +428,8 @@ def fetch_metal_prices(db: Session = Depends(get_db)) -> ApiResponse:
             fail_count += 1
             continue
 
-        # 调用抓取函数
-        raw_price = cfg["fetcher"]()
+        # 调用抓取函数（异步，避免阻塞事件循环）
+        raw_price = await asyncio.to_thread(cfg["fetcher"])
         if raw_price is None:
             errors.append(f"{material_name}（{cfg['source']}）抓取失败，网络不通或接口异常")
             fail_count += 1

@@ -769,6 +769,14 @@ def delete_image(
         except OSError:
             pass  # 文件删除失败不阻断流程
 
+    # Delete thumbnail if exists
+    thumb_path = IMAGE_DIR / (file_path.stem + "_thumb.jpg")
+    if thumb_path.exists():
+        try:
+            thumb_path.unlink()
+        except OSError:
+            pass
+
     # 记录是否是封面
     was_cover = img.is_cover
 

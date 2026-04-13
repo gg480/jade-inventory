@@ -28,8 +28,13 @@ BARCODE_DIR = IMAGE_DIR.parent / "barcodes"
 BARCODE_DIR.mkdir(parents=True, exist_ok=True)
 
 
+_barcode_cache = {}
+
 def _generate_barcode_base64(sku_code: str) -> str:
-    """生成 Code128 条码 PNG，返回 base64 编码字符串。"""
+    """生成 Code128 条码 PNG，返回 base64 编码字符串。结果会缓存到内存。"""
+    if sku_code in _barcode_cache:
+        return _barcode_cache[sku_code]
+
     # 生成条码 SVG，然后转 PNG
     barcode = Code128(sku_code, writer=ImageWriter())
     buffer = io.BytesIO()
@@ -48,7 +53,8 @@ def _generate_barcode_base64(sku_code: str) -> str:
     img.save(png_buffer, format="PNG", optimize=True)
     png_buffer.seek(0)
     b64 = base64.b64encode(png_buffer.read()).decode("utf-8")
-    return f"data:image/png;base64,{b64}"
+    _barcode_cache[sku_code] = f"data:image/png;base64,{b64}"
+    return _barcode_cache[sku_code]
 
 
 def _get_cover_image(item: Item) -> Optional[str]:

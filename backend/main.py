@@ -75,7 +75,7 @@ except Exception:
     pass
 
 # ── 以下为正常的模块导入（此时 config/.env 已加载到 os.environ）──
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
@@ -94,7 +94,7 @@ from routers.metal_prices import router as metal_prices_router
 from routers.export import router as export_router
 from routers.label import router as label_router
 from routers.pricing import router as pricing_router
-from routers.auth import router as auth_router
+from routers.auth import router as auth_router, get_current_user
 from config import IMAGE_DIR
 
 
@@ -174,19 +174,19 @@ async def log_requests(request: Request, call_next):
 # ── API 路由（统一前缀 /api/v1）──
 _API_PREFIX = "/api/v1"
 
-app.include_router(dicts_router,      prefix=_API_PREFIX)
-app.include_router(router_config,     prefix=_API_PREFIX)
-app.include_router(batches_router,    prefix=_API_PREFIX)
-app.include_router(items_router,      prefix=_API_PREFIX)
-app.include_router(sales_router,      prefix=_API_PREFIX)
-app.include_router(customers_router,  prefix=_API_PREFIX)
-app.include_router(suppliers_router,   prefix=_API_PREFIX)
-app.include_router(dashboard_router,    prefix=_API_PREFIX)
-app.include_router(metal_prices_router,  prefix=_API_PREFIX)
-app.include_router(export_router,       prefix=_API_PREFIX)
-app.include_router(label_router,        prefix=_API_PREFIX)
-app.include_router(pricing_router,      prefix=_API_PREFIX)
 app.include_router(auth_router,        prefix=_API_PREFIX)
+app.include_router(dicts_router,      prefix=_API_PREFIX, dependencies=[Depends(get_current_user)])
+app.include_router(router_config,     prefix=_API_PREFIX, dependencies=[Depends(get_current_user)])
+app.include_router(batches_router,    prefix=_API_PREFIX, dependencies=[Depends(get_current_user)])
+app.include_router(items_router,      prefix=_API_PREFIX, dependencies=[Depends(get_current_user)])
+app.include_router(sales_router,      prefix=_API_PREFIX, dependencies=[Depends(get_current_user)])
+app.include_router(customers_router,  prefix=_API_PREFIX, dependencies=[Depends(get_current_user)])
+app.include_router(suppliers_router,   prefix=_API_PREFIX, dependencies=[Depends(get_current_user)])
+app.include_router(dashboard_router,    prefix=_API_PREFIX, dependencies=[Depends(get_current_user)])
+app.include_router(metal_prices_router,  prefix=_API_PREFIX, dependencies=[Depends(get_current_user)])
+app.include_router(export_router,       prefix=_API_PREFIX, dependencies=[Depends(get_current_user)])
+app.include_router(label_router,        prefix=_API_PREFIX, dependencies=[Depends(get_current_user)])
+app.include_router(pricing_router,      prefix=_API_PREFIX, dependencies=[Depends(get_current_user)])
 
 
 # ── 健康检查 ──

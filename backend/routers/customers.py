@@ -73,7 +73,7 @@ def _generate_customer_code(db: Session) -> str:
 # ══════════════════════════════════════════════
 
 @router.get(
-    "/",
+    "",
     response_model=ApiResponse[CustomerListOut],
     summary="获取客户列表",
     description="支持按姓名、电话、微信号搜索，默认只返回启用的客户。支持分页。",
@@ -120,7 +120,7 @@ def list_customers(
 # ══════════════════════════════════════════════
 
 @router.post(
-    "/",
+    "",
     response_model=ApiResponse[CustomerOut],
     status_code=status.HTTP_201_CREATED,
     summary="新增客户",
