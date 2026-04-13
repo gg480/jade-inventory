@@ -6,9 +6,9 @@ services:
     ports:
       - "8080:8000"
     volumes:
-      # 数据持久化：数据库 + 图片
+      # 数据持久化：数据库 + 上传图片
       - ./data:/app/data
-      # 配置目录（备用）
+      # 配置持久化：config/.env 会自动加载（可选，不用也能跑）
       - ./config:/app/config
     environment:
       # ↓↓↓ 必须设置：至少16位随机字符串 ↓↓↓

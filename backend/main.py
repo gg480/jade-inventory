@@ -6,6 +6,37 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+
+# ── 自动加载 /app/config/.env（必须放在所有业务模块导入之前）──
+def _load_config_env() -> None:
+    """
+    尝试从 /app/config/.env 加载环境变量。
+    文件不存在则跳过，不报错。
+    格式：每行 KEY=VALUE，支持 # 注释和空行。
+    仅对未设置的环境变量生效（不覆盖 docker-compose/environment 中已设置的值）。
+    """
+    env_path = Path("/app/config/.env")
+    if not env_path.exists():
+        return
+    try:
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                key = key.strip()
+                value = value.strip().strip("\"'")
+                if key and key not in os.environ:
+                    os.environ[key] = value
+    except Exception as e:
+        print(f"[config] 加载 config/.env 失败: {e}")
+
+_load_config_env()
+
+# ── 以下为正常的模块导入（此时 config/.env 已加载到 os.environ）──
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -132,5 +163,3 @@ app.mount("/", StaticFiles(directory="static", html=True), name="frontend")
 # ── 图片静态文件服务 ──
 IMAGE_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/data/images", StaticFiles(directory=str(IMAGE_DIR)), name="images")
-
-
