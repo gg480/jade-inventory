@@ -84,7 +84,7 @@ def list_customers(
     wechat: Optional[str] = Query(None, description="按微信号搜索（精确匹配）"),
     include_inactive: bool = Query(False, description="是否包含已停用的客户"),
     page: int = Query(1, ge=1, description="页码"),
-    size: int = Query(100, ge=1, le=500, description="每页条数"),
+    size: int = Query(100, ge=1, le=1000, description="每页条数"),
     db: Session = Depends(get_db),
 ) -> ApiResponse[CustomerListOut]:
     q = db.query(Customer)
