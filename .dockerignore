@@ -5,6 +5,7 @@ __pycache__
 .gitignore
 .env
 data/
+config/
 node_modules/
 frontend/node_modules/
 *.md

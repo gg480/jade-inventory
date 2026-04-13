@@ -6,8 +6,15 @@ services:
     ports:
       - "8080:8000"
     volumes:
+      # 数据持久化：数据库文件 + 上传图片
       - ./data:/app/data
+      # 配置文件持久化
+      - ./config:/app/config
+    # 从 config/.env 读取环境变量（如果文件不存在则使用下方 environment）
+    env_file:
+      - ./config/.env
     environment:
+      # 以下为默认值，会被 config/.env 中的同名变量覆盖
       - DB_PATH=/app/data/jade.db
       - IMAGE_DIR=/app/data/images
       - CORS_ORIGINS=*

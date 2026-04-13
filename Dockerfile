@@ -20,8 +20,8 @@ COPY backend/ .
 # 复制前端构建产物（vite outDir 设置为 ../backend/static）
 COPY --from=frontend-builder /app/backend/static ./static
 
-# 数据目录
-RUN mkdir -p /app/data/images
+# 数据目录 + 配置目录（volume 挂载点）
+RUN mkdir -p /app/data/images /app/config
 
 EXPOSE 8000
 
