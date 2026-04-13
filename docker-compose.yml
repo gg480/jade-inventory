@@ -1,24 +1,22 @@
 version: "3.8"
 
 # ══════════════════════════════════════════════
-#  玉器进销存系统 — Docker Compose 配置
-#  适用于极空间 NAS 部署
+#  玉器进销存系统 — 极空间 Docker Compose 配置
 # ══════════════════════════════════════════════
 #
-# 使用前必读：
+# 使用说明：
 #
-# 1. 修改 JWT_SECRET（必须！）
-#    在下方 environment 里把 JWT_SECRET 改成任意随机字符串（至少16位）
-#    例如：JWT_SECRET=k9mP2xQr7Lv4nZ8a
+# 1. 必须修改 JWT_SECRET
+#    把下面的 JWT_SECRET 值改成任意随机字符串（至少16位）
+#    例如：JWT_SECRET=Jade2025Secret@NAS
 #
-# 2. 修改数据存储路径（必须！）
-#    把 volumes 里左边的路径改成极空间上你想存放数据的实际位置
-#    例如映射到个人文件夹：/vol1/homes/admin/jade-data/data
+# 2. 把这个文件内容粘贴到极空间"容器管理 → Compose"里新建项目
+#    项目名建议填：jade-inventory
 #
-# 3. 首次启动前，请在极空间上提前创建好目录：
-#    mkdir -p /你的路径/data/images
-#    mkdir -p /你的路径/data/barcodes
-#    mkdir -p /你的路径/config
+# 3. 数据存放位置（自动创建，不需要手动建目录）：
+#    文件管理器 → Container → jade-inventory → data → jade.db（数据库）
+#                                             → data → images（图片）
+#                                             → config → .env（配置）
 #
 # ══════════════════════════════════════════════
 
@@ -29,36 +27,23 @@ services:
     ports:
       - "8080:8000"
     volumes:
-      # ── 数据持久化路径 ──────────────────────────────
-      # 格式：宿主机路径:容器内路径
-      # 请将左边替换为极空间上你实际的存储路径！
-      #
-      # 示例（按你的极空间实际情况选一种）：
-      #   个人文件夹：/vol1/homes/admin/jade-data/data:/app/data
-      #   共享文件夹：/vol1/Share/jade-data/data:/app/data
-      #   默认容器数据卷路径（可直接使用）：
-      - /vol1/Container/jade-inventory/data:/app/data
-      - /vol1/Container/jade-inventory/config:/app/config
-      # ────────────────────────────────────────────────
-
+      # 相对路径：自动保存在 Compose 项目目录下
+      # 极空间文件管理器路径：Container/jade-inventory/data/
+      - ./data:/app/data
+      - ./config:/app/config
     environment:
-      # ── 数据路径（与上面 volumes 里的容器内路径保持一致，不需要改）──
+      # ── 必须修改！JWT 签名密钥 ──────────────
+      # 改成你自己的随机字符串（至少16位），用于登录安全
+      - JWT_SECRET=please-change-this-to-your-own-secret
+
+      # ── 以下保持默认即可 ──────────────────
       - DB_PATH=/app/data/jade.db
       - IMAGE_DIR=/app/data/images
-
-      # ── 必须修改！JWT 签名密钥 ──────────────────────
-      # 请改成任意随机字符串（至少16位），否则登录功能不安全
-      # 生成命令：python3 -c "import secrets; print(secrets.token_hex(32))"
-      - JWT_SECRET=please-change-this-to-a-random-string-at-least-16-chars
-
-      # ── 可选配置 ───────────────────────────────────
       - CORS_ORIGINS=*
       - TZ=Asia/Shanghai
-      # Token 有效天数（默认30天）
+      # 可选：Token有效天数（默认30天）
       # - JWT_EXPIRE_DAYS=30
-      # 默认管理员密码（仅首次初始化时有效）
+      # 可选：首次部署的初始管理员密码（默认 admin123）
       # - DEFAULT_ADMIN_PASSWORD=admin123
-      # 压货预警天数
-      # - ALERT_DAYS=90
 
     restart: unless-stopped
