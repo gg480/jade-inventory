@@ -31,9 +31,9 @@ from datetime import date, timedelta
 import requests
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-BASE_URL = "http://127.0.0.1:8000/api/v1"
+BASE_URL = os.environ.get("BASE_URL", "http://127.0.0.1:8000/api/v1")
 LOGIN_PASSWORD = "admin123"
-SERVER_PORT = 8000
+SERVER_PORT = int(os.environ.get("SERVER_PORT", "8000"))
 
 # Unique test identifiers to avoid collisions on re-runs
 TEST_RUN_ID = f"{date.today().strftime('%m%d')}T{int(time.time()) % 100000}"  # e.g. "0612T83721"
@@ -185,8 +185,8 @@ def test_step_2_dashboard(result: TestResult):
 def test_step_3_create_supplier(result: TestResult):
     """POST /suppliers — Create a test supplier."""
     payload = {"name": SUPPLIER_NAME, "contact": "13800138000"}
-    print(f"  POST /suppliers/  body={json.dumps(payload, ensure_ascii=False)}")
-    resp = api("POST", "/suppliers/", json=payload)
+    print(f"  POST /suppliers  body={json.dumps(payload, ensure_ascii=False)}")
+    resp = api("POST", "/suppliers", json=payload)
     check(result, resp, expected_status_codes=[201])
 
     if result.passed:
@@ -205,8 +205,8 @@ def test_step_4_create_customer(result: TestResult):
     """POST /customers — Create a test customer."""
     global created_customer_id
     payload = {"name": CUSTOMER_NAME, "phone": "13900139000"}
-    print(f"  POST /customers/  body={json.dumps(payload, ensure_ascii=False)}")
-    resp = api("POST", "/customers/", json=payload)
+    print(f"  POST /customers  body={json.dumps(payload, ensure_ascii=False)}")
+    resp = api("POST", "/customers", json=payload)
     check(result, resp, expected_status_codes=[201])
 
     if result.passed:
